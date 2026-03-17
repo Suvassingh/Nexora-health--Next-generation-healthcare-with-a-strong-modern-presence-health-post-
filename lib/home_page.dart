@@ -12,8 +12,6 @@ import 'package:healthpost_app/widgets/language_toggle_button.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:healthpost_app/controller/internet_status_controller.dart';
 
-
-
 class HomeStats {
   final int todayPatients;
   final int pending;
@@ -46,8 +44,13 @@ class AppointmentItem {
   });
 
   factory AppointmentItem.fromMap(Map<String, dynamic> m) {
-    final patientName =
-        m['patients']?['user_profiles']?['full_name'] ?? 'Unknown';
+
+    final profileData =
+        m['user_profiles!appointments_patient_id_fkey']
+            as Map<String, dynamic>? ??
+        m['user_profiles'] as Map<String, dynamic>?;
+
+    final patientName = profileData?['full_name']?.toString() ?? 'Unknown';
     final initials = _initials(patientName);
     return AppointmentItem(
       id: m['id']?.toString() ?? '',
@@ -139,7 +142,6 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen>
       final userId = supabase.auth.currentUser?.id;
       if (userId == null) throw Exception('Not authenticated');
 
-      // ── Step 1: Doctor info (these tables always exist) ──────────────────
       final profileResults = await Future.wait([
         supabase
             .from('user_profiles')
@@ -161,7 +163,6 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen>
       _specialty = doctorMap?['specialty'] ?? '';
       _healthpostName = doctorMap?['healthpost_name'] ?? '';
 
-      // ── Step 2: Appointments (table may not exist yet) ───────────────────
       List<dynamic> apptList = [];
       List<dynamic> monthlyList = [];
 
@@ -189,9 +190,9 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen>
         final apptResults = await Future.wait([
           supabase
               .from('appointments')
+              
               .select(
-                'id, reason, status, scheduled_at, '
-                'patients(user_profiles(full_name))',
+                'id, reason, status, scheduled_at,user_profiles!appointments_patient_id_fkey(full_name)',
               )
               .eq('doctor_id', userId)
               .gte('scheduled_at', todayStart)
@@ -200,7 +201,7 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen>
               .limit(10),
           supabase
               .from('appointments')
-              .select('id, status')
+              .select('id, status, scheduled_at')
               .eq('doctor_id', userId)
               .gte(
                 'scheduled_at',
@@ -211,18 +212,14 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen>
         apptList = apptResults[0] as List<dynamic>;
         monthlyList = apptResults[1] as List<dynamic>;
       } on PostgrestException catch (pgErr) {
-        // PGRST205 = table not in schema cache (table doesn't exist yet).
-        // Any other appointments-related error → swallow and show zeros.
-        // The doctor's name/info still loads correctly.
+        
         debugPrint(
           'appointments fetch skipped: ${pgErr.code} ${pgErr.message}',
         );
       } catch (_) {
-        // Any other error on appointments → show zeros, not a crash screen
         debugPrint('appointments fetch skipped (unknown error)');
       }
 
-      // ── Parse & compute 
       _appointments = apptList
           .map((e) => AppointmentItem.fromMap(e as Map<String, dynamic>))
           .toList();
@@ -463,14 +460,6 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen>
   }
 }
 
-
-
-
-
-
-
-
-
 class _SectionHeader extends StatelessWidget {
   final String title;
   final String actionLabel;
@@ -514,9 +503,6 @@ class _SectionHeader extends StatelessWidget {
     );
   }
 }
-
-
-
 
 class _EmptyAppointments extends StatelessWidget {
   const _EmptyAppointments();
@@ -673,9 +659,9 @@ class _QuickAction extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// RECENT ACTIVITY
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 class _RecentActivityList extends StatelessWidget {
   final List<Map<String, dynamic>> activity;
   const _RecentActivityList({required this.activity});
@@ -804,5 +790,3 @@ class _EmptyActivity extends StatelessWidget {
     );
   }
 }
-
-

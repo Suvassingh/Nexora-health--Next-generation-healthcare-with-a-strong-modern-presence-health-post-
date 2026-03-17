@@ -1059,9 +1059,7 @@ class _SignupScreenState extends State<SignupScreen>
     }, onConflict: 'id');
   }
 
-  /// Saves doctor-specific fields to the `doctors` table.
-  /// Also stores province / district / municipality so the booking screen
-  /// can filter by location.
+
   Future<void> _saveDoctorProfile({required String userId}) async {
     final data = <String, dynamic>{
       'user_id': userId,

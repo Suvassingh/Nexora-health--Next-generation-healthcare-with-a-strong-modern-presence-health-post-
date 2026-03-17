@@ -25,7 +25,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final List<Widget> _pages = [
     const DoctorHomeScreen(),
-    const AppointmentScreen(),
+    const DoctorAppointmentsScreen(),
     const ChatScreen(),
     const DoctorProfileScreen(),
   ];
