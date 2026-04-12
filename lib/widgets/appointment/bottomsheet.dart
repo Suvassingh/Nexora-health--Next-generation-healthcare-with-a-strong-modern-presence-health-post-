@@ -106,8 +106,8 @@ class DetailSheet extends StatelessWidget {
                 Rows(Icons.calendar_today_rounded, 'Date', appt.dateLabel),
                 Rows(Icons.access_time_rounded, 'Time', appt.timeLabel),
                 Rows(appt.consultIcon, 'Type', appt.consultLabel),
-                if (appt.reason?.isNotEmpty == true)
-                  Rows(Icons.notes_rounded, 'Reason', appt.reason!),
+                if (appt.patient_notes?.isNotEmpty == true)
+                  Rows(Icons.notes_rounded, 'Reason', appt.patient_notes!),
                 const SizedBox(height: 24),
                 // Action buttons
                 if (onConfirm != null && onDecline != null) ...[

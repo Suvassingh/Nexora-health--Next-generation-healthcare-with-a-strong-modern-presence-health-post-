@@ -21,6 +21,7 @@ void main() async {
     url: dotenv.env['supabase_url']!,
     anonKey: dotenv.env['supabase_anonKey']!,
   );
+  // await NotificationService.init();
   runApp(HealthpostApp(languageCode: languageCode));
 }
 

@@ -5,7 +5,7 @@ import 'package:healthpost_app/app_constants.dart';
 import 'package:healthpost_app/controller/internet_status_controller.dart';
 import 'package:healthpost_app/home_screen.dart';
 import 'package:healthpost_app/l10n/app_localizations.dart';
-import 'package:healthpost_app/signup_screen.dart';
+import 'package:healthpost_app/services/get_service_key.dart';
 import 'package:healthpost_app/widgets/connectivity_icon.dart';
 import 'package:healthpost_app/widgets/input_field.dart';
 import 'package:healthpost_app/widgets/language_toggle_button.dart';
@@ -52,9 +52,7 @@ class _LoginScreenState extends State<LoginScreen> {
         Get.offAll(() => HomeScreen());
       }
     }
-    // catch (e) {
-    //   logger(e.toString(), "Nexora Login");
-    // }
+   
     finally {
       setState(() {
         loading = false;
@@ -173,8 +171,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   style: const TextStyle(fontSize: 14, color: Colors.black54),
                 ),
                 TextButton(
-                  onPressed: () {
-                    Get.offAll(() => SignupScreen());
+                  onPressed: () async {
+                    GetServerKey getServerKey = GetServerKey();
+                    String accessToken = await getServerKey.getServerKeyToken();
+                    print(accessToken);
                   },
                   child: Text(
                     AppLocalizations.of(context)!.signup,

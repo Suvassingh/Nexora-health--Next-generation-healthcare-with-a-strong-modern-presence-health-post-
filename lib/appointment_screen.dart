@@ -7,12 +7,6 @@ import 'package:healthpost_app/widgets/appointment/bottomsheet.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:healthpost_app/app_constants.dart';
 
-
-
-
-
-
-
 class DoctorAppointmentsScreen extends StatefulWidget {
   const DoctorAppointmentsScreen({super.key});
   @override
@@ -30,7 +24,6 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
   bool _processing = false;
   String? _error;
 
-  // Bucketed lists
   List<DAppt> _pending = [];
   List<DAppt> _confirmed = [];
   List<DAppt> _completed = [];
@@ -55,27 +48,36 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
       _error = null;
     });
     try {
-      final uid = _supa.auth.currentUser?.id;
-      if (uid == null) throw Exception('Not authenticated');
+      final authUid = _supa.auth.currentUser?.id;
+      print(' DoctorAppointments - Auth UID: $authUid');
+      if (authUid == null) throw Exception('Not authenticated');
+
+      final doctorRes = await _supa
+          .from('doctors')
+          .select('id')
+          .eq('user_id', authUid)
+          .maybeSingle();
+      final doctorId = doctorRes?['id'] as int?;
+      print(' Doctor integer ID: $doctorId');
+      if (doctorId == null) throw Exception('Doctor profile not found');
 
       final rows = await _supa
           .from('appointments')
           .select(
-            'id, patient_id, scheduled_at, status, '
-            'consultation_type, reason, '
+        'id, patient_id, scheduled_at, status, '
+            'consultation_type, patient_notes, '
             'user_profiles!appointments_patient_id_fkey(full_name, avatar_url)',
-          )
-          .eq('doctor_id', uid)
+      )
+          .eq('doctor_id', doctorId)
           .order('scheduled_at', ascending: true);
 
+      print(' Appointments fetched: ${rows.length}');
+      for (var r in rows) {
+        print('   - ${r['id']} | ${r['status']} | ${r['scheduled_at']}');
+      }
+
       final all = (rows as List)
-          .map((e) {
-            try {
-              return DAppt.fromMap(e as Map<String, dynamic>);
-            } catch (_) {
-              return null;
-            }
-          })
+          .map((e) => DAppt.fromMap(e as Map<String, dynamic>))
           .where((a) => a != null)
           .cast<DAppt>()
           .toList();
@@ -85,7 +87,7 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
         _pending = all
             .where(
               (a) => a.isPending && (a.scheduledAt.isAfter(now) || a.isToday),
-            )
+        )
             .toList();
         _confirmed = all.where((a) => a.isConfirmed).toList();
         _completed = all.where((a) => a.isCompleted).toList()
@@ -95,6 +97,7 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
         _loading = false;
       });
     } catch (e) {
+      print(' Error loading appointments: $e');
       setState(() {
         _error = e.toString();
         _loading = false;
@@ -103,16 +106,17 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
   }
 
   Future<void> _updateStatus(
-    String apptId,
-    String newStatus, {
-    String? snackMsg,
-  }) async {
+      String apptId,
+      String newStatus, {
+        String? snackMsg,
+      }) async {
     setState(() => _processing = true);
     try {
       await _supa
           .from('appointments')
           .update({'status': newStatus})
           .eq('id', apptId);
+      print(' Updated appointment $apptId to $newStatus');
 
       Get.snackbar(
         'Updated',
@@ -123,8 +127,9 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
         margin: const EdgeInsets.all(12),
         duration: const Duration(seconds: 3),
       );
-      await _load();
+      await _load(); // refresh list
     } catch (e) {
+      print(' Update failed: $e');
       Get.snackbar(
         'Error',
         'Could not update: $e',
@@ -138,95 +143,100 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
     }
   }
 
-  Future<bool?> _confirm({
+  Future<bool?> _confirmDialog({
     required String title,
     required String body,
     required String confirmLabel,
     required Color confirmColor,
-  }) => showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: Text(
-        title,
-        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-      ),
-      content: Text(
-        body,
-        style: const TextStyle(fontSize: 13, color: Colors.black54),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx, false),
-          child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-        ),
-        ElevatedButton(
-          onPressed: () => Navigator.pop(ctx, true),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: confirmColor,
-            foregroundColor: Colors.white,
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
+  }) =>
+      showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text(
+            title,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
-          child: Text(confirmLabel),
+          content: Text(
+            body,
+            style: const TextStyle(fontSize: 13, color: Colors.black54),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: confirmColor,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: Text(confirmLabel),
+            ),
+          ],
         ),
-      ],
-    ),
-  );
+      );
 
   Future<void> _confirmAppt(DAppt a) async {
-    final ok = await _confirm(
+    final ok = await _confirmDialog(
       title: 'Confirm appointment?',
       body: '${a.patientName}  •  ${a.dateTimeLabel}',
       confirmLabel: 'Confirm',
       confirmColor: const Color(0xFF1565C0),
     );
-    if (ok == true)
+    if (ok == true) {
       await _updateStatus(
         a.id,
         'confirmed',
         snackMsg: 'Appointment confirmed for ${a.patientName}',
       );
+    }
   }
 
   Future<void> _declineAppt(DAppt a) async {
-    final ok = await _confirm(
+    final ok = await _confirmDialog(
       title: 'Decline appointment?',
       body:
-          '${a.patientName}  •  ${a.dateTimeLabel}\nThis will cancel the booking.',
+      '${a.patientName}  •  ${a.dateTimeLabel}\nThis will cancel the booking.',
       confirmLabel: 'Decline',
       confirmColor: Colors.red,
     );
-    if (ok == true)
+    if (ok == true) {
       await _updateStatus(a.id, 'cancelled', snackMsg: 'Appointment declined');
+    }
   }
 
   Future<void> _completeAppt(DAppt a) async {
-    final ok = await _confirm(
+    final ok = await _confirmDialog(
       title: 'Mark as completed?',
       body: 'Consultation with ${a.patientName} has ended.',
       confirmLabel: 'Complete',
       confirmColor: const Color(0xFF2E7D32),
     );
-    if (ok == true)
+    if (ok == true) {
       await _updateStatus(
         a.id,
         'completed',
         snackMsg: 'Consultation marked complete',
       );
+    }
   }
 
   Future<void> _noShowAppt(DAppt a) async {
-    final ok = await _confirm(
+    final ok = await _confirmDialog(
       title: 'Mark as no-show?',
       body: '${a.patientName} did not join the appointment.',
       confirmLabel: 'No Show',
       confirmColor: Colors.brown.shade600,
     );
-    if (ok == true)
+    if (ok == true) {
       await _updateStatus(a.id, 'no_show', snackMsg: 'Marked as no-show');
+    }
   }
 
   void _showDetail(DAppt a) => showModalBottomSheet(
@@ -237,33 +247,30 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
       appt: a,
       onConfirm: a.isPending
           ? () {
-              Navigator.pop(context);
-              _confirmAppt(a);
-            }
+        Navigator.pop(context);
+        _confirmAppt(a);
+      }
           : null,
       onDecline: a.isPending
           ? () {
-              Navigator.pop(context);
-              _declineAppt(a);
-            }
+        Navigator.pop(context);
+        _declineAppt(a);
+      }
           : null,
       onComplete: a.isConfirmed
           ? () {
-              Navigator.pop(context);
-              _completeAppt(a);
-            }
+        Navigator.pop(context);
+        _completeAppt(a);
+      }
           : null,
       onNoShow: a.isConfirmed
           ? () {
-              Navigator.pop(context);
-              _noShowAppt(a);
-            }
+        Navigator.pop(context);
+        _noShowAppt(a);
+      }
           : null,
     ),
   );
-
-
-
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -274,14 +281,14 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
         : _error != null
         ? _buildError()
         : TabBarView(
-            controller: _tabCtrl,
-            children: [
-              _buildTab(_pending, 'pending'),
-              _buildTab(_confirmed, 'confirmed'),
-              _buildTab(_completed, 'completed'),
-              _buildTab(_cancelled, 'cancelled'),
-            ],
-          ),
+      controller: _tabCtrl,
+      children: [
+        _buildTab(_pending, 'pending'),
+        _buildTab(_confirmed, 'confirmed'),
+        _buildTab(_completed, 'completed'),
+        _buildTab(_cancelled, 'cancelled'),
+      ],
+    ),
   );
 
   PreferredSizeWidget _buildAppBar() => AppBar(
@@ -290,9 +297,9 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
     systemOverlayStyle: SystemUiOverlayStyle.light,
     leading: Navigator.canPop(context)
         ? IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () => Get.back(),
-          )
+      icon: const Icon(Icons.arrow_back, color: Colors.white),
+      onPressed: () => Get.back(),
+    )
         : null,
     title: const Text(
       'Appointments',
@@ -321,11 +328,10 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
           text: 'Pending${_pending.isNotEmpty ? " (${_pending.length})" : ""}',
         ),
         Tab(
-          text:
-              'Confirmed${_confirmed.isNotEmpty ? " (${_confirmed.length})" : ""}',
+          text: 'Confirmed${_confirmed.isNotEmpty ? " (${_confirmed.length})" : ""}',
         ),
-        Tab(text: 'Done'),
-        Tab(text: 'Cancelled'),
+        const Tab(text: 'Done'),
+        const Tab(text: 'Cancelled'),
       ],
     ),
   );
@@ -344,10 +350,8 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
             appt: a,
             processing: _processing,
             onTap: () => _showDetail(a),
-            // Pending tab — Confirm + Decline
             onConfirm: type == 'pending' ? () => _confirmAppt(a) : null,
             onDecline: type == 'pending' ? () => _declineAppt(a) : null,
-            // Confirmed tab — Complete + No Show
             onComplete: type == 'confirmed' ? () => _completeAppt(a) : null,
             onNoShow: type == 'confirmed' ? () => _noShowAppt(a) : null,
           );
@@ -460,11 +464,6 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
     ),
   );
 }
-
-
-   
-
-
 
 
 

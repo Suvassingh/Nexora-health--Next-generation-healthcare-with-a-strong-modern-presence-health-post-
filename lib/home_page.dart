@@ -31,7 +31,7 @@ class AppointmentItem {
   final String patientName;
   final String reason;
   final String time;
-  final String status; // 'pending' | 'confirmed' | 'completed'
+  final String status;
   final String? patientInitials;
 
   const AppointmentItem({
@@ -44,18 +44,16 @@ class AppointmentItem {
   });
 
   factory AppointmentItem.fromMap(Map<String, dynamic> m) {
-
     final profileData =
         m['user_profiles!appointments_patient_id_fkey']
             as Map<String, dynamic>? ??
         m['user_profiles'] as Map<String, dynamic>?;
-
     final patientName = profileData?['full_name']?.toString() ?? 'Unknown';
     final initials = _initials(patientName);
     return AppointmentItem(
       id: m['id']?.toString() ?? '',
       patientName: patientName,
-      reason: m['reason'] ?? 'General Consultation',
+      reason: m['patient_notes'] ?? 'General Consultation',
       time: _formatTime(m['scheduled_at']),
       status: m['status'] ?? 'pending',
       patientInitials: initials,
@@ -96,16 +94,12 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen>
     ConnectivityController(),
   );
 
-  // Doctor info (from user_profiles + doctors)
   String _doctorName = '';
   String _specialty = '';
   String _healthpostName = '';
   String? _avatarUrl;
 
-  // Stats
   HomeStats _stats = const HomeStats();
-
-  // Appointments
   List<AppointmentItem> _appointments = [];
   List<Map<String, dynamic>> _recentActivity = [];
 
@@ -132,6 +126,39 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen>
     super.dispose();
   }
 
+  Future<void> _insertTestAppointment(int doctorId, String patientId) async {
+    try {
+      final now = DateTime.now();
+      final tomorrow = now.add(const Duration(days: 1));
+      final scheduledAt = DateTime(
+        tomorrow.year,
+        tomorrow.month,
+        tomorrow.day,
+        10,
+        45,
+      );
+
+      await supabase.from('appointments').insert({
+        'id': supabase.rpc('gen_random_uuid'),
+        'patient_id': patientId,
+        'doctor_id': doctorId,
+        'consultation_type': 'chat',
+        'status': 'pending',
+        'scheduled_at': scheduledAt.toIso8601String(),
+        'duration_minutes': 30,
+        'patient_notes': 'Test appointment created from debug button',
+      });
+      Get.snackbar('Success', 'Test appointment created');
+      _fetchHomeData();
+    } catch (e) {
+      Get.snackbar(
+        'Error',
+        'Failed to create test appointment: $e',
+        backgroundColor: Colors.red,
+      );
+    }
+  }
+
   Future<void> _fetchHomeData() async {
     setState(() {
       _loading = true;
@@ -139,88 +166,62 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen>
     });
 
     try {
-      final userId = supabase.auth.currentUser?.id;
-      if (userId == null) throw Exception('Not authenticated');
+      final authUid = supabase.auth.currentUser?.id;
+      if (authUid == null) throw Exception('Not authenticated');
 
-      final profileResults = await Future.wait([
-        supabase
-            .from('user_profiles')
-            .select('full_name, avatar_url, preferred_language')
-            .eq('id', userId)
-            .maybeSingle(),
-        supabase
-            .from('doctors')
-            .select('specialty, healthpost_name')
-            .eq('user_id', userId)
-            .maybeSingle(),
-      ]);
+      final doctorRes = await supabase
+          .from('doctors')
+          .select('id, specialty, healthpost_name')
+          .eq('user_id', authUid)
+          .maybeSingle();
+      final doctorId = doctorRes?['id'] as int?;
+      if (doctorId == null) throw Exception('Doctor profile not found');
 
-      final profileMap = profileResults[0] as Map<String, dynamic>?;
-      final doctorMap = profileResults[1] as Map<String, dynamic>?;
+      _specialty = doctorRes?['specialty'] ?? '';
+      _healthpostName = doctorRes?['healthpost_name'] ?? '';
 
-      _doctorName = profileMap?['full_name'] ?? 'Doctor';
-      _avatarUrl = profileMap?['avatar_url'] as String?;
-      _specialty = doctorMap?['specialty'] ?? '';
-      _healthpostName = doctorMap?['healthpost_name'] ?? '';
+      final profileRes = await supabase
+          .from('user_profiles')
+          .select('full_name, avatar_url')
+          .eq('id', authUid)
+          .maybeSingle();
+      _doctorName = profileRes?['full_name'] ?? 'Doctor';
+      _avatarUrl = profileRes?['avatar_url'] as String?;
 
-      List<dynamic> apptList = [];
-      List<dynamic> monthlyList = [];
+      final today = DateTime.now();
+      final todayStart = DateTime(
+        today.year,
+        today.month,
+        today.day,
+      ).toIso8601String();
+      final todayEnd = DateTime(
+        today.year,
+        today.month,
+        today.day,
+        23,
+        59,
+        59,
+      ).toIso8601String();
 
-      try {
-        final today = DateTime.now();
-        final todayStart = DateTime(
-          today.year,
-          today.month,
-          today.day,
-        ).toIso8601String();
-        final todayEnd = DateTime(
-          today.year,
-          today.month,
-          today.day,
-          23,
-          59,
-          59,
-        ).toIso8601String();
-        final monthStart = DateTime(
-          today.year,
-          today.month,
-          1,
-        ).toIso8601String();
+      final todayAppts = await supabase
+          .from('appointments')
+          .select(
+            'id, patient_notes, status, scheduled_at, user_profiles!appointments_patient_id_fkey(full_name)',
+          )
+          .eq('doctor_id', doctorId)
+          .gte('scheduled_at', todayStart)
+          .lte('scheduled_at', todayEnd)
+          .order('scheduled_at', ascending: true)
+          .limit(10);
 
-        final apptResults = await Future.wait([
-          supabase
-              .from('appointments')
-              
-              .select(
-                'id, reason, status, scheduled_at,user_profiles!appointments_patient_id_fkey(full_name)',
-              )
-              .eq('doctor_id', userId)
-              .gte('scheduled_at', todayStart)
-              .lte('scheduled_at', todayEnd)
-              .order('scheduled_at', ascending: true)
-              .limit(10),
-          supabase
-              .from('appointments')
-              .select('id, status, scheduled_at')
-              .eq('doctor_id', userId)
-              .gte(
-                'scheduled_at',
-                DateTime(today.year, today.month, 1).toIso8601String(),
-              ),
-        ]);
+      final monthStart = DateTime(today.year, today.month, 1).toIso8601String();
+      final monthlyAppts = await supabase
+          .from('appointments')
+          .select('id, status, scheduled_at')
+          .eq('doctor_id', doctorId)
+          .gte('scheduled_at', monthStart);
 
-        apptList = apptResults[0] as List<dynamic>;
-        monthlyList = apptResults[1] as List<dynamic>;
-      } on PostgrestException catch (pgErr) {
-        
-        debugPrint(
-          'appointments fetch skipped: ${pgErr.code} ${pgErr.message}',
-        );
-      } catch (_) {
-        debugPrint('appointments fetch skipped (unknown error)');
-      }
-
-      _appointments = apptList
+      _appointments = (todayAppts as List)
           .map((e) => AppointmentItem.fromMap(e as Map<String, dynamic>))
           .toList();
 
@@ -228,10 +229,10 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen>
         todayPatients: _appointments.length,
         pending: _appointments.where((a) => a.status == 'pending').length,
         completed: _appointments.where((a) => a.status == 'completed').length,
-        totalThisMonth: monthlyList.length,
+        totalThisMonth: (monthlyAppts as List).length,
       );
 
-      _recentActivity = monthlyList
+      _recentActivity = (monthlyAppts as List)
           .where(
             (e) => e['status'] == 'completed' || e['status'] == 'confirmed',
           )
@@ -295,7 +296,6 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen>
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
       appBar: _buildAppBar(),
-
       body: _loading
           ? const HomeShimmer()
           : _error != null
@@ -347,13 +347,12 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen>
       actions: [
         Obx(() {
           final ct = connectivityController.connectionType.value;
-          if (ct == ConnectivityResult.none) {
+          if (ct == ConnectivityResult.none)
             return ConnectivityIndicator(icon: Icons.signal_wifi_off);
-          } else if (ct == ConnectivityResult.wifi) {
+          if (ct == ConnectivityResult.wifi)
             return ConnectivityIndicator(icon: Icons.wifi);
-          } else if (ct == ConnectivityResult.mobile) {
+          if (ct == ConnectivityResult.mobile)
             return ConnectivityIndicator(icon: Icons.signal_cellular_4_bar);
-          }
           return const SizedBox.shrink();
         }),
         IconButton(onPressed: () {}, icon: LanguageToggleButton()),
@@ -407,7 +406,33 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen>
           _recentActivity.isEmpty
               ? const _EmptyActivity()
               : _RecentActivityList(activity: _recentActivity),
-          const SizedBox(height: 100), // FAB padding
+          const SizedBox(height: 100),
+
+          // Debug button – insert test appointment (only in debug mode)
+          if (_appointments.isEmpty && !_loading && _error == null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  final userId = supabase.auth.currentUser?.id;
+                  if (userId == null) return;
+                  final doctorRes = await supabase
+                      .from('doctors')
+                      .select('id')
+                      .eq('user_id', userId)
+                      .maybeSingle();
+                  final doctorId = doctorRes?['id'] as int?;
+                  if (doctorId == null) return;
+
+                  // Find a patient user_id (e.g., the one from your SQL)
+                  const testPatientId = 'bf30b0fa-54cd-49cf-8a6e-d9c59a7516b8';
+                  await _insertTestAppointment(doctorId, testPatientId);
+                },
+                icon: const Icon(Icons.add),
+                label: const Text('Insert Test Appointment (Debug)'),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+              ),
+            ),
         ],
       ),
     );

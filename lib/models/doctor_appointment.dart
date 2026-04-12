@@ -9,7 +9,7 @@ class DAppt {
   final DateTime scheduledAt;
   final String status;
   final String consultType;
-  final String? reason;
+  final String? patient_notes;
 
   const DAppt({
     required this.id,
@@ -19,7 +19,7 @@ class DAppt {
     required this.scheduledAt,
     required this.status,
     required this.consultType,
-    this.reason,
+    this.patient_notes,
   });
 
   String get initials {
@@ -123,7 +123,7 @@ class DAppt {
       scheduledAt: DateTime.parse(m['scheduled_at']).toLocal(),
       status: m['status']?.toString() ?? 'pending',
       consultType: m['consultation_type']?.toString() ?? 'audio',
-      reason: m['reason']?.toString(),
+      patient_notes: m['patient_notes']?.toString(),
     );
   }
 }

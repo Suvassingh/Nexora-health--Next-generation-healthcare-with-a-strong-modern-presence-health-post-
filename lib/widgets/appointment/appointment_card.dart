@@ -156,7 +156,7 @@ class ApptCard extends StatelessWidget {
                           ],
                         ),
                         // Reason (if set)
-                        if (appt.reason != null && appt.reason!.isNotEmpty) ...[
+                        if (appt.patient_notes != null && appt.patient_notes!.isNotEmpty) ...[
                           const SizedBox(height: 5),
                           Row(
                             children: [
@@ -168,7 +168,7 @@ class ApptCard extends StatelessWidget {
                               const SizedBox(width: 4),
                               Expanded(
                                 child: Text(
-                                  appt.reason!,
+                                  appt.patient_notes!,
                                   style: const TextStyle(
                                     fontSize: 11,
                                     color: Colors.grey,
