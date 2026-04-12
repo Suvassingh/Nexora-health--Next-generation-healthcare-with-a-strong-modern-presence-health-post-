@@ -170,21 +170,21 @@ class _LoginScreenState extends State<LoginScreen> {
                   AppLocalizations.of(context)!.donthaveanaccout,
                   style: const TextStyle(fontSize: 14, color: Colors.black54),
                 ),
-                TextButton(
-                  onPressed: () async {
-                    GetServerKey getServerKey = GetServerKey();
-                    String accessToken = await getServerKey.getServerKeyToken();
-                    print(accessToken);
-                  },
-                  child: Text(
-                    AppLocalizations.of(context)!.signup,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: AppConstants.secondaryColor,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
+                // TextButton(
+                //   onPressed: () async {
+                //     GetServerKey getServerKey = GetServerKey();
+                //     String accessToken = await getServerKey.getServerKeyToken();
+                //     print(accessToken);
+                //   },
+                //   child: Text(
+                //     AppLocalizations.of(context)!.signup,
+                //     style: const TextStyle(
+                //       fontSize: 14,
+                //       color: AppConstants.secondaryColor,
+                //       fontWeight: FontWeight.bold,
+                //     ),
+                //   ),
+                // ),
               ],
             ),
           ],
