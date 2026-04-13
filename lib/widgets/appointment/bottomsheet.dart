@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:healthpost_app/appointment_screen.dart';
+
 import 'package:healthpost_app/models/doctor_appointment.dart';
 
 class DetailSheet extends StatelessWidget {
@@ -106,8 +106,8 @@ class DetailSheet extends StatelessWidget {
                 Rows(Icons.calendar_today_rounded, 'Date', appt.dateLabel),
                 Rows(Icons.access_time_rounded, 'Time', appt.timeLabel),
                 Rows(appt.consultIcon, 'Type', appt.consultLabel),
-                if (appt.patient_notes?.isNotEmpty == true)
-                  Rows(Icons.notes_rounded, 'Reason', appt.patient_notes!),
+                if (appt.patientNotes?.isNotEmpty == true)
+                  Rows(Icons.notes_rounded, 'Reason', appt.patientNotes!),
                 const SizedBox(height: 24),
                 // Action buttons
                 if (onConfirm != null && onDecline != null) ...[
@@ -149,4 +149,139 @@ class DetailSheet extends StatelessWidget {
       ),
     ),
   );
+}
+
+class PatientAvatar extends StatelessWidget {
+  final String name;
+  final String? url;
+  final double size;
+
+  const PatientAvatar({required this.name, this.url, required this.size});
+
+  String get _initials {
+    final parts = name.trim().split(' ');
+    if (parts.length >= 2) {
+      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    }
+    return parts.isNotEmpty && parts[0].isNotEmpty
+        ? parts[0][0].toUpperCase()
+        : 'P';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return CircleAvatar(
+      radius: size / 2,
+      backgroundColor: Colors.blueGrey.shade50,
+      backgroundImage: url != null && url!.isNotEmpty
+          ? NetworkImage(url!)
+          : null,
+      child: url == null || url!.isEmpty
+          ? Text(
+              _initials,
+              style: TextStyle(
+                color: Colors.blueGrey.shade700,
+                fontWeight: FontWeight.bold,
+              ),
+            )
+          : null,
+    );
+  }
+}
+
+class Rows extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String value;
+
+  const Rows(this.icon, this.title, this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: Colors.grey.shade600),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1A1A2E),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class ActionBtn extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final bool outlined;
+  final VoidCallback onTap;
+
+  const ActionBtn({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+    this.outlined = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (outlined) {
+      return OutlinedButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 18, color: color),
+        label: Text(
+          label,
+          style: TextStyle(color: color, fontWeight: FontWeight.w700),
+        ),
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(color: color.withOpacity(0.35)),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          foregroundColor: color,
+        ),
+      );
+    }
+
+    return ElevatedButton.icon(
+      onPressed: onTap,
+      icon: Icon(icon, size: 18),
+      label: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        elevation: 0,
+      ),
+    );
+  }
 }

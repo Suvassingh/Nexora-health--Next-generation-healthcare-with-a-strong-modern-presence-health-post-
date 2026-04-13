@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:healthpost_app/services/api_service.dart';
 import 'package:healthpost_app/widgets/home_appointment.dart';
 import 'package:healthpost_app/widgets/home_hero_header.dart';
 import 'package:healthpost_app/widgets/home_simmer.dart';
@@ -17,7 +18,6 @@ class HomeStats {
   final int pending;
   final int completed;
   final int totalThisMonth;
-
   const HomeStats({
     this.todayPatients = 0,
     this.pending = 0,
@@ -43,37 +43,32 @@ class AppointmentItem {
     this.patientInitials,
   });
 
-  factory AppointmentItem.fromMap(Map<String, dynamic> m) {
-    final profileData =
-        m['user_profiles!appointments_patient_id_fkey']
-            as Map<String, dynamic>? ??
-        m['user_profiles'] as Map<String, dynamic>?;
-    final patientName = profileData?['full_name']?.toString() ?? 'Unknown';
-    final initials = _initials(patientName);
+  factory AppointmentItem.fromApi(Map<String, dynamic> json) {
+    final patientName = json['patient_full_name'] ?? 'Unknown';
     return AppointmentItem(
-      id: m['id']?.toString() ?? '',
+      id: json['id']?.toString() ?? '',
       patientName: patientName,
-      reason: m['patient_notes'] ?? 'General Consultation',
-      time: _formatTime(m['scheduled_at']),
-      status: m['status'] ?? 'pending',
-      patientInitials: initials,
+      reason: json['patient_notes'] ?? 'General Consultation',
+      time: _formatTime(json['scheduled_at']),
+      status: json['status'] ?? 'pending',
+      patientInitials: _initials(patientName),
     );
   }
 
   static String _initials(String name) {
-    final p = name.trim().split(' ');
-    if (p.length >= 2) return '${p[0][0]}${p[1][0]}'.toUpperCase();
-    return p.isNotEmpty && p[0].isNotEmpty ? p[0][0].toUpperCase() : '?';
+    final parts = name.trim().split(' ');
+    if (parts.length >= 2) return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    return parts.isNotEmpty && parts[0].isNotEmpty ? parts[0][0].toUpperCase() : '?';
   }
 
   static String _formatTime(dynamic iso) {
     if (iso == null) return '';
     try {
       final d = DateTime.parse(iso.toString()).toLocal();
-      final h = d.hour % 12 == 0 ? 12 : d.hour % 12;
-      final m = d.minute.toString().padLeft(2, '0');
+      final hour = d.hour % 12 == 0 ? 12 : d.hour % 12;
+      final minute = d.minute.toString().padLeft(2, '0');
       final ampm = d.hour < 12 ? 'AM' : 'PM';
-      return '$h:$m $ampm';
+      return '$hour:$minute $ampm';
     } catch (_) {
       return '';
     }
@@ -89,20 +84,18 @@ class DoctorHomeScreen extends StatefulWidget {
 
 class _DoctorHomeScreenState extends State<DoctorHomeScreen>
     with SingleTickerProviderStateMixin {
-  final supabase = Supabase.instance.client;
-  final ConnectivityController connectivityController = Get.put(
-    ConnectivityController(),
-  );
+  final ConnectivityController connectivityController = Get.put(ConnectivityController());
 
+  // Data fields
   String _doctorName = '';
   String _specialty = '';
   String _healthpostName = '';
   String? _avatarUrl;
-
   HomeStats _stats = const HomeStats();
   List<AppointmentItem> _appointments = [];
   List<Map<String, dynamic>> _recentActivity = [];
 
+  // UI state
   bool _loading = true;
   String? _error;
 
@@ -126,39 +119,6 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen>
     super.dispose();
   }
 
-  Future<void> _insertTestAppointment(int doctorId, String patientId) async {
-    try {
-      final now = DateTime.now();
-      final tomorrow = now.add(const Duration(days: 1));
-      final scheduledAt = DateTime(
-        tomorrow.year,
-        tomorrow.month,
-        tomorrow.day,
-        10,
-        45,
-      );
-
-      await supabase.from('appointments').insert({
-        'id': supabase.rpc('gen_random_uuid'),
-        'patient_id': patientId,
-        'doctor_id': doctorId,
-        'consultation_type': 'chat',
-        'status': 'pending',
-        'scheduled_at': scheduledAt.toIso8601String(),
-        'duration_minutes': 30,
-        'patient_notes': 'Test appointment created from debug button',
-      });
-      Get.snackbar('Success', 'Test appointment created');
-      _fetchHomeData();
-    } catch (e) {
-      Get.snackbar(
-        'Error',
-        'Failed to create test appointment: $e',
-        backgroundColor: Colors.red,
-      );
-    }
-  }
-
   Future<void> _fetchHomeData() async {
     setState(() {
       _loading = true;
@@ -166,78 +126,32 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen>
     });
 
     try {
-      final authUid = supabase.auth.currentUser?.id;
-      if (authUid == null) throw Exception('Not authenticated');
+    
+      final doctorProfile = await ApiService.getDoctorProfile();
+      _specialty = doctorProfile['specialty'] ?? '';
+      _healthpostName = doctorProfile['healthpost_name'] ?? '';
+      _doctorName = doctorProfile['full_name'] ?? 'Doctor';
+      _avatarUrl = doctorProfile['avatar_url'] as String?;
 
-      final doctorRes = await supabase
-          .from('doctors')
-          .select('id, specialty, healthpost_name')
-          .eq('user_id', authUid)
-          .maybeSingle();
-      final doctorId = doctorRes?['id'] as int?;
-      if (doctorId == null) throw Exception('Doctor profile not found');
+     
+      final todayAppts = await ApiService.getTodayAppointments();
+      _appointments = todayAppts.map((json) => AppointmentItem.fromApi(json)).toList();
 
-      _specialty = doctorRes?['specialty'] ?? '';
-      _healthpostName = doctorRes?['healthpost_name'] ?? '';
+     
+      final monthlyAppts = await ApiService.getMonthlyAppointments();
 
-      final profileRes = await supabase
-          .from('user_profiles')
-          .select('full_name, avatar_url')
-          .eq('id', authUid)
-          .maybeSingle();
-      _doctorName = profileRes?['full_name'] ?? 'Doctor';
-      _avatarUrl = profileRes?['avatar_url'] as String?;
-
-      final today = DateTime.now();
-      final todayStart = DateTime(
-        today.year,
-        today.month,
-        today.day,
-      ).toIso8601String();
-      final todayEnd = DateTime(
-        today.year,
-        today.month,
-        today.day,
-        23,
-        59,
-        59,
-      ).toIso8601String();
-
-      final todayAppts = await supabase
-          .from('appointments')
-          .select(
-            'id, patient_notes, status, scheduled_at, user_profiles!appointments_patient_id_fkey(full_name)',
-          )
-          .eq('doctor_id', doctorId)
-          .gte('scheduled_at', todayStart)
-          .lte('scheduled_at', todayEnd)
-          .order('scheduled_at', ascending: true)
-          .limit(10);
-
-      final monthStart = DateTime(today.year, today.month, 1).toIso8601String();
-      final monthlyAppts = await supabase
-          .from('appointments')
-          .select('id, status, scheduled_at')
-          .eq('doctor_id', doctorId)
-          .gte('scheduled_at', monthStart);
-
-      _appointments = (todayAppts as List)
-          .map((e) => AppointmentItem.fromMap(e as Map<String, dynamic>))
-          .toList();
-
+      final stats = await ApiService.getDoctorStats();
       _stats = HomeStats(
-        todayPatients: _appointments.length,
-        pending: _appointments.where((a) => a.status == 'pending').length,
-        completed: _appointments.where((a) => a.status == 'completed').length,
-        totalThisMonth: (monthlyAppts as List).length,
+        todayPatients: stats['today_count'] ?? _appointments.length,
+        pending: stats['pending_count'] ?? _appointments.where((a) => a.status == 'pending').length,
+        completed: stats['completed_count'] ?? _appointments.where((a) => a.status == 'completed').length,
+        totalThisMonth: stats['total_this_month'] ?? monthlyAppts.length,
       );
+      print('DEBUG stats: $stats');   
 
-      _recentActivity = (monthlyAppts as List)
-          .where(
-            (e) => e['status'] == 'completed' || e['status'] == 'confirmed',
-          )
+      _recentActivity = monthlyAppts
+          .where((e) => e['status'] == 'completed' || e['status'] == 'confirmed')
           .take(5)
-          .map((e) => e as Map<String, dynamic>)
           .toList();
 
       setState(() => _loading = false);
@@ -258,36 +172,15 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen>
   }
 
   String _initials(String name) {
-    final p = name.trim().split(' ');
-    if (p.length >= 2) return '${p[0][0]}${p[1][0]}'.toUpperCase();
-    return p.isNotEmpty && p[0].isNotEmpty ? p[0][0].toUpperCase() : 'D';
+    final parts = name.trim().split(' ');
+    if (parts.length >= 2) return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    return parts.isNotEmpty && parts[0].isNotEmpty ? parts[0][0].toUpperCase() : 'D';
   }
 
   String _todayLabel() {
     final d = DateTime.now();
-    const days = [
-      'Monday',
-      'Tuesday',
-      'Wednesday',
-      'Thursday',
-      'Friday',
-      'Saturday',
-      'Sunday',
-    ];
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return '${days[d.weekday - 1]}, ${d.day} ${months[d.month - 1]} ${d.year}';
   }
 
@@ -301,13 +194,13 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen>
           : _error != null
           ? _buildErrorState()
           : FadeTransition(
-              opacity: _fadeAnim,
-              child: RefreshIndicator(
-                color: AppConstants.primaryColor,
-                onRefresh: _fetchHomeData,
-                child: _buildBody(),
-              ),
-            ),
+        opacity: _fadeAnim,
+        child: RefreshIndicator(
+          color: AppConstants.primaryColor,
+          onRefresh: _fetchHomeData,
+          child: _buildBody(),
+        ),
+      ),
     );
   }
 
@@ -319,27 +212,13 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen>
       automaticallyImplyLeading: false,
       title: const Row(
         children: [
-          Image(
-            image: AssetImage('assets/images/gov_logo.webp'),
-            width: 36,
-            height: 36,
-          ),
+          Image(image: AssetImage('assets/images/gov_logo.webp'), width: 36, height: 36),
           SizedBox(width: 10),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                AppConstants.nepalSarkar,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-              Text(
-                AppConstants.govtOfNepal,
-                style: TextStyle(fontSize: 9, color: Colors.white70),
-              ),
+              Text(AppConstants.nepalSarkar, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white)),
+              Text(AppConstants.govtOfNepal, style: TextStyle(fontSize: 9, color: Colors.white70)),
             ],
           ),
         ],
@@ -347,15 +226,12 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen>
       actions: [
         Obx(() {
           final ct = connectivityController.connectionType.value;
-          if (ct == ConnectivityResult.none)
-            return ConnectivityIndicator(icon: Icons.signal_wifi_off);
-          if (ct == ConnectivityResult.wifi)
-            return ConnectivityIndicator(icon: Icons.wifi);
-          if (ct == ConnectivityResult.mobile)
-            return ConnectivityIndicator(icon: Icons.signal_cellular_4_bar);
+          if (ct == ConnectivityResult.none) return const ConnectivityIndicator(icon: Icons.signal_wifi_off);
+          if (ct == ConnectivityResult.wifi) return const ConnectivityIndicator(icon: Icons.wifi);
+          if (ct == ConnectivityResult.mobile) return const ConnectivityIndicator(icon: Icons.signal_cellular_4_bar);
           return const SizedBox.shrink();
         }),
-        IconButton(onPressed: () {}, icon: LanguageToggleButton()),
+        IconButton(onPressed: () {}, icon: const LanguageToggleButton()),
         const SizedBox(width: 4),
       ],
     );
@@ -389,50 +265,10 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen>
               ? const _EmptyAppointments()
               : AppointmentsList(appointments: _appointments),
           const SizedBox(height: 20),
-          _SectionHeader(
-            title: 'Quick actions',
-            actionLabel: '',
-            onAction: null,
-          ),
+          _SectionHeader(title: 'Quick actions', actionLabel: '', onAction: null),
           const SizedBox(height: 10),
           const _QuickActions(),
           const SizedBox(height: 20),
-          _SectionHeader(
-            title: 'Recent activity',
-            actionLabel: 'View all',
-            onAction: () {},
-          ),
-          const SizedBox(height: 10),
-          _recentActivity.isEmpty
-              ? const _EmptyActivity()
-              : _RecentActivityList(activity: _recentActivity),
-          const SizedBox(height: 100),
-
-          // Debug button – insert test appointment (only in debug mode)
-          if (_appointments.isEmpty && !_loading && _error == null)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ElevatedButton.icon(
-                onPressed: () async {
-                  final userId = supabase.auth.currentUser?.id;
-                  if (userId == null) return;
-                  final doctorRes = await supabase
-                      .from('doctors')
-                      .select('id')
-                      .eq('user_id', userId)
-                      .maybeSingle();
-                  final doctorId = doctorRes?['id'] as int?;
-                  if (doctorId == null) return;
-
-                  // Find a patient user_id (e.g., the one from your SQL)
-                  const testPatientId = 'bf30b0fa-54cd-49cf-8a6e-d9c59a7516b8';
-                  await _insertTestAppointment(doctorId, testPatientId);
-                },
-                icon: const Icon(Icons.add),
-                label: const Text('Insert Test Appointment (Debug)'),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-              ),
-            ),
         ],
       ),
     );
@@ -445,26 +281,11 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.cloud_off_rounded,
-              size: 64,
-              color: Colors.grey.shade300,
-            ),
+            Icon(Icons.cloud_off_rounded, size: 64, color: Colors.grey.shade300),
             const SizedBox(height: 16),
-            Text(
-              'Could not load home',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey.shade700,
-              ),
-            ),
+            Text('Could not load home', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey.shade700)),
             const SizedBox(height: 8),
-            Text(
-              _error ?? '',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
-            ),
+            Text(_error ?? '', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: _fetchHomeData,
@@ -473,9 +294,7 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen>
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppConstants.primaryColor,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
             ),
           ],
@@ -484,6 +303,7 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen>
     );
   }
 }
+
 
 class _SectionHeader extends StatelessWidget {
   final String title;
@@ -687,131 +507,4 @@ class _QuickAction extends StatelessWidget {
 
 
 
-class _RecentActivityList extends StatelessWidget {
-  final List<Map<String, dynamic>> activity;
-  const _RecentActivityList({required this.activity});
 
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          children: List.generate(activity.length, (i) {
-            final isLast = i == activity.length - 1;
-            final item = activity[i];
-            final status = item['status'] ?? 'pending';
-            return Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 12,
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 34,
-                        height: 34,
-                        decoration: BoxDecoration(
-                          color: status == 'completed'
-                              ? const Color(0xFFEAF7EF)
-                              : const Color(0xFFE8F4FD),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(
-                          status == 'completed'
-                              ? Icons.check_circle_outline_rounded
-                              : Icons.event_available_outlined,
-                          size: 18,
-                          color: status == 'completed'
-                              ? const Color(0xFF27AE60)
-                              : AppConstants.primaryColor,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Appointment ${status}',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF374151),
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: status == 'completed'
-                              ? const Color(0xFFEAF7EF)
-                              : const Color(0xFFE8F4FD),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          status,
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: status == 'completed'
-                                ? const Color(0xFF27AE60)
-                                : AppConstants.primaryColor,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (!isLast)
-                  Divider(
-                    height: 1,
-                    thickness: 1,
-                    indent: 60,
-                    color: Colors.grey.shade100,
-                  ),
-              ],
-            );
-          }),
-        ),
-      ),
-    );
-  }
-}
-
-class _EmptyActivity extends StatelessWidget {
-  const _EmptyActivity();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 24),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Center(
-          child: Text(
-            'No recent activity',
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade400),
-          ),
-        ),
-      ),
-    );
-  }
-}

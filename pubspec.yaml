@@ -49,6 +49,8 @@ dependencies:
   firebase_core: ^4.5.0
   googleapis_auth: ^2.0.0
   firebase_messaging: ^16.1.2
+  dio: ^5.9.2
+
 
 dev_dependencies:
   flutter_test:

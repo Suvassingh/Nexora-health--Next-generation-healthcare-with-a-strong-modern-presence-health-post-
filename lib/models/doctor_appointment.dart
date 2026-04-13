@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-
 class DAppt {
   final String id;
   final String patientId;
@@ -9,7 +8,7 @@ class DAppt {
   final DateTime scheduledAt;
   final String status;
   final String consultType;
-  final String? patient_notes;
+  final String? patientNotes;
 
   const DAppt({
     required this.id,
@@ -19,7 +18,7 @@ class DAppt {
     required this.scheduledAt,
     required this.status,
     required this.consultType,
-    this.patient_notes,
+    this.patientNotes,
   });
 
   String get initials {
@@ -53,18 +52,8 @@ class DAppt {
     if (isToday) return 'Today';
     if (isTomorrow) return 'Tomorrow';
     const m = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
     ];
     return '${scheduledAt.day} ${m[scheduledAt.month - 1]}';
   }
@@ -82,6 +71,12 @@ class DAppt {
     'video' => Icons.videocam_rounded,
     'audio' => Icons.phone_rounded,
     _ => Icons.chat_bubble_rounded,
+  };
+
+  Color get consultIconColor => switch (consultType) {
+    'video' => const Color(0xFF6C5CE7),
+    'audio' => const Color(0xFF00B894),
+    _ => const Color(0xFF0984E3),
   };
 
   String get consultLabel => switch (consultType) {
@@ -108,22 +103,18 @@ class DAppt {
     _ => status,
   };
 
-  factory DAppt.fromMap(Map<String, dynamic> m) {
-    // patient_id FK → user_profiles.id
-    final prof =
-        m['user_profiles!appointments_patient_id_fkey']
-            as Map<String, dynamic>? ??
-        m['user_profiles'] as Map<String, dynamic>? ??
-        {};
+  /// Factory for API response from `ApiService.getMyAppointments()` (doctor side)
+  factory DAppt.fromApi(Map<String, dynamic> json) {
+    final profile = json['user_profiles'] as Map<String, dynamic>? ?? {};
     return DAppt(
-      id: m['id']?.toString() ?? '',
-      patientId: m['patient_id']?.toString() ?? '',
-      patientName: prof['full_name']?.toString() ?? 'Patient',
-      patientAvatarUrl: prof['avatar_url']?.toString(),
-      scheduledAt: DateTime.parse(m['scheduled_at']).toLocal(),
-      status: m['status']?.toString() ?? 'pending',
-      consultType: m['consultation_type']?.toString() ?? 'audio',
-      patient_notes: m['patient_notes']?.toString(),
+      id: json['id']?.toString() ?? '',
+      patientId: json['patient_id']?.toString() ?? '',
+      patientName: profile['full_name']?.toString() ?? 'Patient',
+      patientAvatarUrl: profile['avatar_url']?.toString(),
+      scheduledAt: DateTime.parse(json['scheduled_at']).toLocal(),
+      status: json['status']?.toString() ?? 'pending',
+      consultType: json['consultation_type']?.toString() ?? 'audio',
+      patientNotes: json['patient_notes']?.toString(),
     );
   }
 }
