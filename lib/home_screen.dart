@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:healthpost_app/appointment_screen.dart';
+import 'package:healthpost_app/chat_list_screen.dart';
 import 'package:healthpost_app/chat_screen.dart';
 import 'package:healthpost_app/home_page.dart';
 import 'package:healthpost_app/profile_screen.dart';
@@ -26,7 +27,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final List<Widget> _pages = [
     const DoctorHomeScreen(),
     const DoctorAppointmentsScreen(),
-    const ChatScreen(),
+    const DoctorChatListScreen(),
     const DoctorProfileScreen(),
   ];
 

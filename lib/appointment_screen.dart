@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:healthpost_app/chat_screen.dart';
 import 'package:healthpost_app/services/api_service.dart';
 import 'package:healthpost_app/widgets/appointment/appointment_card.dart';
 import 'package:healthpost_app/widgets/appointment/bottomsheet.dart';
 import 'package:healthpost_app/app_constants.dart';
 import 'package:healthpost_app/models/doctor_appointment.dart';
 
-import 'consultation_screen.dart'; // new
 
 class DoctorAppointmentsScreen extends StatefulWidget {
   const DoctorAppointmentsScreen({super.key});
@@ -262,7 +262,7 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
   );
 
   void _startConsultation(DAppt appt) {
-    Get.to(() => ConsultationScreen(appt: appt));
+    Get.to(() => ChatScreen(appt: appt));
   }
 
   @override
