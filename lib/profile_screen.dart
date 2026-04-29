@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:healthpost_app/controller/locale_conreoller.dart';
 import 'package:healthpost_app/models/doctor_model.dart';
+import 'package:healthpost_app/providers/profile_providers.dart';
 
 import 'package:healthpost_app/widgets/dropdown_inputfield.dart';
 import 'package:healthpost_app/widgets/edit_field.dart';
@@ -17,15 +18,16 @@ import 'package:healthpost_app/widgets/start_stripe.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:healthpost_app/app_constants.dart';
 import 'package:healthpost_app/login_screen.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class DoctorProfileScreen extends StatefulWidget {
+
+class DoctorProfileScreen extends ConsumerStatefulWidget {
   const DoctorProfileScreen({super.key});
-
   @override
-  State<DoctorProfileScreen> createState() => _DoctorProfileScreenState();
+  ConsumerState<DoctorProfileScreen> createState() => _DoctorProfileScreenState();
 }
 
-class _DoctorProfileScreenState extends State<DoctorProfileScreen>
+class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen>
     with SingleTickerProviderStateMixin {
   final supabase = Supabase.instance.client;
   final LocaleController _localeCtrl = Get.put(
@@ -91,7 +93,6 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen>
     _experienceCtrl = TextEditingController();
     _healthpostCtrl = TextEditingController();
 
-    fetchProfile();
   }
 
   @override
@@ -177,7 +178,6 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen>
   }
 
   Future<void> _saveProfile() async {
-    // Basic validation
     if (_fullNameCtrl.text.trim().isEmpty) {
       _showSnack('Full name cannot be empty', isError: true);
       return;
@@ -189,10 +189,10 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen>
 
     setState(() => _saving = true);
     try {
+      final supabase = Supabase.instance.client;
       final userId = supabase.auth.currentUser?.id;
       if (userId == null) throw Exception('Not authenticated');
 
-      // Build updates
       final profileUpdate = <String, dynamic>{
         'full_name': _fullNameCtrl.text.trim(),
         'phone': _phoneCtrl.text.trim(),
@@ -212,14 +212,13 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen>
         'updated_at': DateTime.now().toIso8601String(),
       };
 
-      // Save both tables in parallel
       await Future.wait([
         supabase.from('user_profiles').update(profileUpdate).eq('id', userId),
         supabase.from('doctors').update(doctorUpdate).eq('user_id', userId),
       ]);
 
-      // Refresh model from DB
-      await fetchProfile();
+      // CHANGED: invalidate provider instead of fetchProfile()
+      ref.invalidate(doctorProfileProvider);
 
       setState(() {
         _editMode = false;
@@ -255,6 +254,7 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen>
   Future<void> _saveLanguage(String locale) async {
     _localeCtrl.setLocale(locale);
     try {
+      final supabase = Supabase.instance.client;
       final userId = supabase.auth.currentUser?.id;
       if (userId == null) return;
       await supabase
@@ -311,37 +311,57 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen>
     if (s == null || s.isEmpty) return '—';
     return s[0].toUpperCase() + s.substring(1);
   }
-
+  Future<void> _refresh() async {
+    ref.invalidate(doctorProfileProvider);
+  }
   @override
   Widget build(BuildContext context) {
+    final profileAsync = ref.watch(doctorProfileProvider);
+
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
       appBar: _buildAppBar(),
-      body: loading
-          ? const Shimmer()
-          : error != null
-          ? ErrorState(
-              error: error!,
-              onRetry: fetchProfile,
-              onSignOut: () async {
-                await supabase.auth.signOut();
-                Get.offAll(() => LoginScreen());
-              },
-            )
-          : FadeTransition(
-              opacity: _fadeAnim,
-              child: SlideTransition(
-                position: _slideAnim,
-                child: RefreshIndicator(
-                  color: AppConstants.primaryColor,
-                  onRefresh: _editMode ? () async {} : fetchProfile,
-                  child: _buildBody(),
-                ),
+      body: profileAsync.when(
+        loading: () => const Shimmer(),
+        error: (e, _) => ErrorState(
+          error: e.toString(),
+          onRetry: _refresh,
+          onSignOut: () async {
+            await Supabase.instance.client.auth.signOut();
+            Get.offAll(() => LoginScreen());
+          },
+        ),
+        data: (data) {
+          // Sync local state on first load or after refresh
+          if (doctor == null || doctor != data) {
+            // Use addPostFrameCallback to avoid setState during build
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                setState(() => doctor = data);
+                _populateControllers(data);
+                // Handle locale
+                final lang = data.preferredLanguage ?? 'english';
+                _localeCtrl.setLocale(lang == 'nepali' ? 'np' : 'en');
+                if (!_animController.isCompleted) _animController.forward();
+              }
+            });
+          }
+          if (doctor == null) return const Shimmer(); // first frame guard
+          return FadeTransition(
+            opacity: _fadeAnim,
+            child: SlideTransition(
+              position: _slideAnim,
+              child: RefreshIndicator(
+                color: AppConstants.primaryColor,
+                onRefresh: _editMode ? () async {} : () async => _refresh(),
+                child: _buildBody(),
               ),
             ),
+          );
+        },
+      ),
     );
   }
-
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
       backgroundColor: AppConstants.primaryColor,

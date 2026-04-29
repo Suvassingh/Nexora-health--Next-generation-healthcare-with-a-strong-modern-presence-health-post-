@@ -61,5 +61,6 @@ class DoctorProfileModel {
     doctorIsVerified: doctor['is_verified'] ?? false,
     isActive: doctor['is_active'] ?? true,
     doctorSince: doctor['created_at'],
+
   );
 }

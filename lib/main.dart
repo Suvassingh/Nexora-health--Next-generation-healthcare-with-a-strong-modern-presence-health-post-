@@ -9,7 +9,7 @@ import 'package:healthpost_app/splash_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:healthpost_app/controller/internet_status_controller.dart';
-
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 void main() async {
   Get.put(ConnectivityController(), permanent: true);
   await dotenv.load(fileName: ".env");
@@ -22,7 +22,7 @@ void main() async {
     anonKey: dotenv.env['supabase_anonKey']!,
   );
   // await NotificationService.init();
-  runApp(HealthpostApp(languageCode: languageCode));
+  runApp(ProviderScope(child: HealthpostApp(languageCode: languageCode)));
 }
 
 class HealthpostApp extends StatefulWidget {

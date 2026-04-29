@@ -1,95 +1,43 @@
+
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:get/get.dart';
+import 'package:healthpost_app/call_screen.dart';
 import 'package:healthpost_app/chat_screen.dart';
-import 'package:healthpost_app/services/api_service.dart';
+import 'package:healthpost_app/providers/appointment_provider.dart';
 import 'package:healthpost_app/widgets/appointment/appointment_card.dart';
 import 'package:healthpost_app/widgets/appointment/bottomsheet.dart';
 import 'package:healthpost_app/app_constants.dart';
 import 'package:healthpost_app/models/doctor_appointment.dart';
+import 'package:healthpost_app/services/api_service.dart';
+import 'package:permission_handler/permission_handler.dart';
 
-
-class DoctorAppointmentsScreen extends StatefulWidget {
+class DoctorAppointmentsScreen extends ConsumerStatefulWidget {
   const DoctorAppointmentsScreen({super.key});
 
   @override
-  State<DoctorAppointmentsScreen> createState() =>
+  ConsumerState<DoctorAppointmentsScreen> createState() =>
       _DoctorAppointmentsScreenState();
 }
 
-class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
+class _DoctorAppointmentsScreenState
+    extends ConsumerState<DoctorAppointmentsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabCtrl;
-
-  bool _loading = true;
   bool _processing = false;
-  String? _error;
-
-  List<DAppt> _pending = [];
-  List<DAppt> _today = [];
-  List<DAppt> _upcoming = [];
-  List<DAppt> _completed = [];
-  List<DAppt> _cancelled = [];
 
   @override
   void initState() {
     super.initState();
     _tabCtrl = TabController(length: 5, vsync: this);
-    _loadAppointments();
   }
 
   @override
   void dispose() {
     _tabCtrl.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadAppointments() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final rows = await ApiService.getMyAppointments();
-      final all = rows.map((json) => DAppt.fromApi(json)).toList();
-
-      final now = DateTime.now();
-      final todayStart = DateTime(now.year, now.month, now.day);
-      final todayEnd = todayStart.add(const Duration(days: 1));
-
-      setState(() {
-        _pending = all.where((a) => a.status == 'pending').toList()
-          ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
-
-        _today = all
-            .where((a) =>
-        a.status == 'confirmed' &&
-            a.scheduledAt.isAfter(todayStart) &&
-            a.scheduledAt.isBefore(todayEnd))
-            .toList()
-          ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
-
-        _upcoming = all
-            .where((a) => a.status == 'confirmed' && a.scheduledAt.isAfter(todayEnd))
-            .toList()
-          ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
-
-        _completed = all.where((a) => a.status == 'completed').toList()
-          ..sort((a, b) => b.scheduledAt.compareTo(a.scheduledAt));
-
-        _cancelled = all
-            .where((a) => a.status == 'cancelled' || a.status == 'no_show')
-            .toList()
-          ..sort((a, b) => b.scheduledAt.compareTo(a.scheduledAt));
-
-        _loading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
-    }
   }
 
   Future<void> _updateStatus(
@@ -99,7 +47,9 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
       }) async {
     setState(() => _processing = true);
     try {
-      await apiCall(apptId);
+      await ref
+          .read(appointmentsProvider.notifier)
+          .updateStatus(apptId, apiCall);
       Get.snackbar(
         'Updated',
         snackMsg ?? 'Status updated',
@@ -109,7 +59,6 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
         margin: const EdgeInsets.all(12),
         duration: const Duration(seconds: 3),
       );
-      await _loadAppointments();
     } catch (e) {
       Get.snackbar(
         'Error',
@@ -143,8 +92,7 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
   Future<void> _declineAppt(DAppt a) async {
     final ok = await _confirmDialog(
       title: 'Decline appointment?',
-      body:
-      '${a.patientName}  •  ${a.dateTimeLabel}\nThis will cancel the booking.',
+      body: '${a.patientName}  •  ${a.dateTimeLabel}\nThis will cancel the booking.',
       confirmLabel: 'Decline',
       confirmColor: Colors.red,
     );
@@ -198,10 +146,12 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
       showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Text(
             title,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            style:
+            const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
           content: Text(
             body,
@@ -210,7 +160,8 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+              child:
+              const Text('Cancel', style: TextStyle(color: Colors.grey)),
             ),
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx, true),
@@ -261,31 +212,65 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
     ),
   );
 
-  void _startConsultation(DAppt appt) {
-    Get.to(() => ChatScreen(appt: appt));
+  Future<void> _startConsultation(DAppt appt) async {
+    final type = appt.consultType.toLowerCase();
+    if (type == 'video' || type == 'audio') {
+      final isVideo = type == 'video';
+      await [Permission.microphone, if (isVideo) Permission.camera].request();
+      try {
+        final result = await ApiService.initiateCall(
+          calleeId: appt.patientId,
+          appointmentId: appt.id,
+          callType: isVideo ? 'video' : 'audio',
+        );
+        final callId = result['call_id'] as String;
+        Get.to(
+              () => CallScreen(
+            callId: callId,
+            remoteUserId: appt.patientId,
+            remoteUserName: appt.patientName,
+            isVideo: isVideo,
+            isCaller: true,
+          ),
+        );
+      } catch (e) {
+        Get.snackbar('Error', 'Could not start call: $e');
+      }
+    } else {
+      Get.to(() => ChatScreen(appt: appt));
+    }
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: const Color(0xFFF0F4F8),
-    appBar: _buildAppBar(),
-    body: _loading
-        ? _buildShimmer()
-        : _error != null
-        ? _buildError()
-        : TabBarView(
-      controller: _tabCtrl,
-      children: [
-        _buildTab(_pending, 'pending'),
-        _buildTab(_today, 'today'),
-        _buildTab(_upcoming, 'upcoming'),
-        _buildTab(_completed, 'completed'),
-        _buildTab(_cancelled, 'cancelled'),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final apptAsync = ref.watch(appointmentsProvider);
 
-  PreferredSizeWidget _buildAppBar() => AppBar(
+    return Scaffold(
+      backgroundColor: const Color(0xFFF0F4F8),
+      appBar: apptAsync.when(
+        // Pass counts to appbar only when data is available
+        data: (data) => _buildAppBar(data),
+        loading: () => _buildAppBar(null),
+        error: (_, __) => _buildAppBar(null),
+      ),
+      body: apptAsync.when(
+        loading: () => _buildShimmer(),
+        error: (e, _) => _buildError(e.toString()),
+        data: (data) => TabBarView(
+          controller: _tabCtrl,
+          children: [
+            _buildTab(data.pending, 'pending'),
+            _buildTab(data.today, 'today'),
+            _buildTab(data.upcoming, 'upcoming'),
+            _buildTab(data.completed, 'completed'),
+            _buildTab(data.cancelled, 'cancelled'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar(AppointmentsData? data) => AppBar(
     backgroundColor: AppConstants.primaryColor,
     elevation: 0,
     systemOverlayStyle: SystemUiOverlayStyle.light,
@@ -306,7 +291,8 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
     actions: [
       IconButton(
         icon: const Icon(Icons.refresh_rounded, color: Colors.white),
-        onPressed: _loadAppointments,
+        onPressed: () =>
+            ref.read(appointmentsProvider.notifier).refresh(),
       ),
     ],
     bottom: TabBar(
@@ -317,17 +303,24 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
       indicatorWeight: 3,
       isScrollable: true,
       tabAlignment: TabAlignment.start,
-      labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+      labelStyle:
+      const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
       unselectedLabelStyle: const TextStyle(fontSize: 12),
       tabs: [
         Tab(
-          text: 'Pending${_pending.isNotEmpty ? " (${_pending.length})" : ""}',
+          text: data != null && data.pending.isNotEmpty
+              ? 'Pending (${data.pending.length})'
+              : 'Pending',
         ),
         Tab(
-          text: 'Today${_today.isNotEmpty ? " (${_today.length})" : ""}',
+          text: data != null && data.today.isNotEmpty
+              ? 'Today (${data.today.length})'
+              : 'Today',
         ),
         Tab(
-          text: 'Upcoming${_upcoming.isNotEmpty ? " (${_upcoming.length})" : ""}',
+          text: data != null && data.upcoming.isNotEmpty
+              ? 'Upcoming (${data.upcoming.length})'
+              : 'Upcoming',
         ),
         const Tab(text: 'Completed'),
         const Tab(text: 'Cancelled'),
@@ -339,7 +332,7 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
     if (list.isEmpty) return _buildEmpty(type);
     return RefreshIndicator(
       color: AppConstants.primaryColor,
-      onRefresh: _loadAppointments,
+      onRefresh: () => ref.read(appointmentsProvider.notifier).refresh(),
       child: ListView.builder(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
         itemCount: list.length,
@@ -349,8 +342,8 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
             appt: a,
             processing: _processing,
             onTap: () => _showDetail(a),
-            // Consult icon only for today's appointments
-            onConsultTap: type == 'today' ? () => _startConsultation(a) : null,
+            onConsultTap:
+            type == 'today' ? () => _startConsultation(a) : null,
             onConfirm: type == 'pending' ? () => _confirmAppt(a) : null,
             onDecline: type == 'pending' ? () => _declineAppt(a) : null,
             onComplete: (type == 'today' || type == 'upcoming')
@@ -387,11 +380,7 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
         'No completed consultations yet',
         'Consultations you finish will appear here',
       ],
-      'cancelled': [
-        Icons.cancel_outlined,
-        'No cancelled appointments',
-        '',
-      ],
+      'cancelled': [Icons.cancel_outlined, 'No cancelled appointments', ''],
     };
     final info = map[type]!;
     return Center(
@@ -434,17 +423,14 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
     ),
   );
 
-  Widget _buildError() => Center(
+  Widget _buildError(String error) => Center(
     child: Padding(
       padding: const EdgeInsets.all(32),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.error_outline_rounded,
-            size: 48,
-            color: Colors.grey.shade300,
-          ),
+          Icon(Icons.error_outline_rounded,
+              size: 48, color: Colors.grey.shade300),
           const SizedBox(height: 12),
           Text(
             'Could not load appointments',
@@ -456,13 +442,15 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
           ),
           const SizedBox(height: 6),
           Text(
-            _error ?? '',
-            style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+            error,
+            style:
+            TextStyle(fontSize: 11, color: Colors.grey.shade400),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 20),
           ElevatedButton.icon(
-            onPressed: _loadAppointments,
+            onPressed: () =>
+                ref.read(appointmentsProvider.notifier).refresh(),
             icon: const Icon(Icons.refresh_rounded),
             label: const Text('Retry'),
             style: ElevatedButton.styleFrom(

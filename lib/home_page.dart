@@ -12,7 +12,8 @@ import 'package:healthpost_app/widgets/connectivity_icon.dart';
 import 'package:healthpost_app/widgets/language_toggle_button.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:healthpost_app/controller/internet_status_controller.dart';
-
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:healthpost_app/providers/home_provider.dart';
 class HomeStats {
   final int todayPatients;
   final int pending;
@@ -75,29 +76,29 @@ class AppointmentItem {
   }
 }
 
-class DoctorHomeScreen extends StatefulWidget {
+class DoctorHomeScreen extends ConsumerStatefulWidget {
   const DoctorHomeScreen({super.key});
 
   @override
-  State<DoctorHomeScreen> createState() => _DoctorHomeScreenState();
+  ConsumerState<DoctorHomeScreen> createState() => _DoctorHomeScreenState();
 }
 
-class _DoctorHomeScreenState extends State<DoctorHomeScreen>
+class _DoctorHomeScreenState extends ConsumerState<DoctorHomeScreen>
     with SingleTickerProviderStateMixin {
   final ConnectivityController connectivityController = Get.put(ConnectivityController());
 
-  // Data fields
-  String _doctorName = '';
-  String _specialty = '';
-  String _healthpostName = '';
-  String? _avatarUrl;
-  HomeStats _stats = const HomeStats();
-  List<AppointmentItem> _appointments = [];
-  List<Map<String, dynamic>> _recentActivity = [];
-
-  // UI state
-  bool _loading = true;
-  String? _error;
+  // // Data fields
+  // String _doctorName = '';
+  // String _specialty = '';
+  // String _healthpostName = '';
+  // String? _avatarUrl;
+  // HomeStats _stats = const HomeStats();
+  // List<AppointmentItem> _appointments = [];
+  // List<Map<String, dynamic>> _recentActivity = [];
+  //
+  // // UI state
+  // bool _loading = true;
+  // String? _error;
 
   late AnimationController _animController;
   late Animation<double> _fadeAnim;
@@ -110,7 +111,6 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen>
       duration: const Duration(milliseconds: 600),
     );
     _fadeAnim = CurvedAnimation(parent: _animController, curve: Curves.easeOut);
-    _fetchHomeData();
   }
 
   @override
@@ -119,50 +119,50 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen>
     super.dispose();
   }
 
-  Future<void> _fetchHomeData() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-
-    try {
-    
-      final doctorProfile = await ApiService.getDoctorProfile();
-      _specialty = doctorProfile['specialty'] ?? '';
-      _healthpostName = doctorProfile['healthpost_name'] ?? '';
-      _doctorName = doctorProfile['full_name'] ?? 'Doctor';
-      _avatarUrl = doctorProfile['avatar_url'] as String?;
-
-     
-      final todayAppts = await ApiService.getTodayAppointments();
-      _appointments = todayAppts.map((json) => AppointmentItem.fromApi(json)).toList();
-
-     
-      final monthlyAppts = await ApiService.getMonthlyAppointments();
-
-      final stats = await ApiService.getDoctorStats();
-      _stats = HomeStats(
-        todayPatients: stats['today_count'] ?? _appointments.length,
-        pending: stats['pending_count'] ?? _appointments.where((a) => a.status == 'pending').length,
-        completed: stats['completed_count'] ?? _appointments.where((a) => a.status == 'completed').length,
-        totalThisMonth: stats['total_this_month'] ?? monthlyAppts.length,
-      );
-      print('DEBUG stats: $stats');   
-
-      _recentActivity = monthlyAppts
-          .where((e) => e['status'] == 'completed' || e['status'] == 'confirmed')
-          .take(5)
-          .toList();
-
-      setState(() => _loading = false);
-      _animController.forward();
-    } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
-    }
-  }
+  // Future<void> _fetchHomeData() async {
+  //   setState(() {
+  //     _loading = true;
+  //     _error = null;
+  //   });
+  //
+  //   try {
+  //
+  //     final doctorProfile = await ApiService.getDoctorProfile();
+  //     _specialty = doctorProfile['specialty'] ?? '';
+  //     _healthpostName = doctorProfile['healthpost_name'] ?? '';
+  //     _doctorName = doctorProfile['full_name'] ?? 'Doctor';
+  //     _avatarUrl = doctorProfile['avatar_url'] as String?;
+  //
+  //
+  //     final todayAppts = await ApiService.getTodayAppointments();
+  //     _appointments = todayAppts.map((json) => AppointmentItem.fromApi(json)).toList();
+  //
+  //
+  //     final monthlyAppts = await ApiService.getMonthlyAppointments();
+  //
+  //     final stats = await ApiService.getDoctorStats();
+  //     _stats = HomeStats(
+  //       todayPatients: stats['today_count'] ?? _appointments.length,
+  //       pending: stats['pending_count'] ?? _appointments.where((a) => a.status == 'pending').length,
+  //       completed: stats['completed_count'] ?? _appointments.where((a) => a.status == 'completed').length,
+  //       totalThisMonth: stats['total_this_month'] ?? monthlyAppts.length,
+  //     );
+  //     print('DEBUG stats: $stats');
+  //
+  //     _recentActivity = monthlyAppts
+  //         .where((e) => e['status'] == 'completed' || e['status'] == 'confirmed')
+  //         .take(5)
+  //         .toList();
+  //
+  //     setState(() => _loading = false);
+  //     _animController.forward();
+  //   } catch (e) {
+  //     setState(() {
+  //       _error = e.toString();
+  //       _loading = false;
+  //     });
+  //   }
+  // }
 
   String _greeting() {
     final hour = DateTime.now().hour;
@@ -186,20 +186,36 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen>
 
   @override
   Widget build(BuildContext context) {
+
+    final homeAsync = ref.watch(homeDataProvider);
+
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
       appBar: _buildAppBar(),
-      body: _loading
-          ? const HomeShimmer()
-          : _error != null
-          ? _buildErrorState()
-          : FadeTransition(
-        opacity: _fadeAnim,
-        child: RefreshIndicator(
-          color: AppConstants.primaryColor,
-          onRefresh: _fetchHomeData,
-          child: _buildBody(),
-        ),
+      body: homeAsync.when(
+        loading: () => const HomeShimmer(),
+
+        error: (e, _) => _buildErrorState(e.toString()),
+
+        data: (data) {
+
+          if (!_animController.isCompleted) {
+            _animController.forward();
+          }
+
+          return FadeTransition(
+            opacity: _fadeAnim,
+            child: RefreshIndicator(
+              color: AppConstants.primaryColor,
+
+              onRefresh: () async {
+                ref.invalidate(homeDataProvider);
+              },
+
+              child: _buildBody(data),
+            ),
+          );
+        },
       ),
     );
   }
@@ -237,68 +253,84 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen>
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(HomeData data) {
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+
           HeroHeader(
-            doctorName: _doctorName,
-            specialty: _specialty,
-            healthpostName: _healthpostName,
-            avatarUrl: _avatarUrl,
-            initials: _initials(_doctorName),
+            doctorName: data.doctorName,
+            specialty: data.specialty,
+            healthpostName: data.healthpostName,
+            avatarUrl: data.avatarUrl,
+            initials: _initials(data.doctorName),
             greeting: _greeting(),
             todayLabel: _todayLabel(),
           ),
+
           const SizedBox(height: 20),
-          StatsGrid(stats: _stats),
+
+          StatsGrid(stats: data.stats),
+
           const SizedBox(height: 20),
+
           _SectionHeader(
             title: "Today's appointments",
             actionLabel: 'See all',
             onAction: () {},
           ),
+
           const SizedBox(height: 10),
-          _appointments.isEmpty
+
+          data.appointments.isEmpty
               ? const _EmptyAppointments()
-              : AppointmentsList(appointments: _appointments),
+              : AppointmentsList(appointments: data.appointments),
+
           const SizedBox(height: 20),
-          _SectionHeader(title: 'Quick actions', actionLabel: '', onAction: null),
+
+          _SectionHeader(
+            title: 'Quick actions',
+            actionLabel: '',
+            onAction: null,
+          ),
+
           const SizedBox(height: 10),
+
           const _QuickActions(),
+
           const SizedBox(height: 20),
         ],
       ),
     );
   }
 
-  Widget _buildErrorState() {
+  Widget _buildErrorState(String error) {
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.cloud_off_rounded, size: 64, color: Colors.grey.shade300),
-            const SizedBox(height: 16),
-            Text('Could not load home', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey.shade700)),
-            const SizedBox(height: 8),
-            Text(_error ?? '', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _fetchHomeData,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppConstants.primaryColor,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-            ),
-          ],
-        ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+
+          const Icon(Icons.cloud_off_rounded, size: 64),
+
+          const SizedBox(height: 16),
+
+          const Text("Could not load home"),
+
+          const SizedBox(height: 8),
+
+          Text(error),
+
+          const SizedBox(height: 20),
+
+          ElevatedButton(
+            onPressed: () {
+              ref.invalidate(homeDataProvider);
+            },
+            child: const Text("Retry"),
+          )
+        ],
       ),
     );
   }

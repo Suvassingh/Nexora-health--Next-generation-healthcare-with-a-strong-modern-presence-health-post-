@@ -239,7 +239,37 @@ class ApiService {
       throw _handleError(e);
     }
   }
+// Add inside ApiService class:
+  static Future<Map<String, dynamic>> initiateCall({
+    required String calleeId,
+    required String appointmentId,
+    required String callType, // 'audio' | 'video'
+  }) async {
+    try {
+      final res = await dio.post(
+        '/calls/initiate',
+        data: {
+          'callee_id': calleeId,
+          'appointment_id': appointmentId,
+          'call_type': callType,
+        },
+      );
+      return res.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
 
+  static Future<void> updateCallStatus({
+    required String callId,
+    required String status, // 'accepted' | 'declined' | 'ended' | 'missed'
+  }) async {
+    try {
+      await dio.patch('/calls/$callId/status', data: {'status': status});
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
 
   static String _handleError(DioException e) {
     if (e.type == DioExceptionType.connectionTimeout ||

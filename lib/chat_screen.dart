@@ -1,4 +1,5 @@
 
+import 'dart:convert';
 import 'dart:io';
 import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:flutter/material.dart';
@@ -43,15 +44,21 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   @override
+  @override
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
-    _channel?.unsubscribe();
+
+    if (_channel != null) {
+      _supabase.removeChannel(_channel!);
+    }
+
     super.dispose();
   }
 
 
   Future<void> _initializeChat() async {
+    if (!mounted) return;
     setState(() => _loading = true);
     try {
       await _ensureUserKeyPair();
@@ -60,9 +67,13 @@ class _ChatScreenState extends State<ChatScreen> {
       await _loadMessages();
       _subscribeToMessages();
     } catch (e) {
-      Get.snackbar('Error', e.toString());
+     if(mounted){
+       Get.snackbar('Error', e.toString());
+     }
     } finally {
-      setState(() => _loading = false);
+      if(mounted){
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -162,7 +173,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   //  AES KEY MANAGEMENT - The AES key for the conversation is fetched and decrypted with the doctor's RSA private key on initialization, allowing for secure end-to-end encryption of messages without exposing the AES key to the server.
-
   Future<void> _fetchAndDecryptAESKey() async {
     final conv = await _supabase
         .from('conversations')
@@ -176,10 +186,58 @@ class _ChatScreenState extends State<ChatScreen> {
     final privKey = EncryptionService.parsePrivateKeyFromPem(
       _currentUserPrivateKeyPem!,
     );
-    final aesB64 = EncryptionService.decryptWithRSA(encKey, privKey);
+    String aesB64;
+    try {
+      aesB64 = EncryptionService.decryptWithRSA(encKey, privKey);
+    } catch (e) {
+      debugPrint('RSA decryption failed: $e');
+      await _recreateConversation();
+      return;
+    }
+
+    if (!_isValidBase64(aesB64)) {
+      debugPrint('Invalid AES key base64: "$aesB64"');
+      await _recreateConversation();
+      return;
+    }
+
     _aesKey = encrypt.Key.fromBase64(aesB64);
   }
 
+  Future<void> _recreateConversation() async {
+    debugPrint('Recreating conversation due to key mismatch');
+    await _supabase.from('conversations').delete().eq('id', _conversationId!);
+    _conversationId = await _getOrCreateConversation();
+    await _fetchAndDecryptAESKey(); // retry
+  }
+  // Future<void> _fetchAndDecryptAESKey() async {
+  //   final conv = await _supabase
+  //       .from('conversations')
+  //       .select('aes_key_encrypted_for_doctor')
+  //       .eq('id', _conversationId!)
+  //       .single();
+  //
+  //   final encKey = conv['aes_key_encrypted_for_doctor'] as String?;
+  //   if (encKey == null) throw Exception('No AES key found in conversation');
+  //
+  //   final privKey = EncryptionService.parsePrivateKeyFromPem(
+  //     _currentUserPrivateKeyPem!,
+  //   );
+  //   final aesB64 = EncryptionService.decryptWithRSA(encKey, privKey);
+  //   if (!_isValidBase64(aesB64)) {
+  //     debugPrint('Decrypted AES key is not valid Base64: "$aesB64"');
+  //     throw Exception('Corrupted AES key – please regenerate conversation');
+  //   }
+  //   _aesKey = encrypt.Key.fromBase64(aesB64);
+  // }
+  bool _isValidBase64(String str) {
+    try {
+      base64Decode(str);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
   //  MESSAGES - Messages are encrypted with AES before sending and decrypted on receipt. Media messages are supported by uploading files to Supabase Storage and sending the URL in the message record. Realtime updates are handled via Supabase's Realtime channels, with optimistic UI updates for a responsive experience.
 
   Future<void> _loadMessages() async {
@@ -188,7 +246,7 @@ class _ChatScreenState extends State<ChatScreen> {
         .select()
         .eq('conversation_id', _conversationId!)
         .order('created_at', ascending: true);
-
+    if (!mounted) return;
     setState(() => _messages = data.map(_decodeMessage).toList());
     _scrollToBottom();
   }
@@ -213,7 +271,7 @@ void _subscribeToMessages() {
               (m) => m['id'] != null && m['id'] == newRecord['id'],
             );
             if (alreadyExists) return;
-
+            if (!mounted) return;
             final decoded = _decodeMessage(newRecord);
             setState(() => _messages.add(decoded));
             _scrollToBottom();
@@ -227,7 +285,7 @@ void _subscribeToMessages() {
 
   Map<String, dynamic> _decodeMessage(Map<String, dynamic> msg) {
     if (msg['is_key_exchange'] == true) {
-      return {...msg, 'decrypted_content': '🔐 Secure session established'};
+      return {...msg, 'decrypted_content': ' Secure session established'};
     }
     if (msg['media_url'] != null) {
       return {...msg, 'decrypted_content': null};
@@ -277,7 +335,9 @@ Future<void> _sendMessage() async {
       'created_at': DateTime.now().toUtc().toIso8601String(),
       'decrypted_content': text,
     };
-    setState(() => _messages.add(tempMsg));
+    if (mounted) {
+      setState(() => _messages.add(tempMsg));
+    }
     _scrollToBottom();
 
     final inserted = await _supabase
@@ -290,13 +350,14 @@ Future<void> _sendMessage() async {
         })
         .select()
         .single();
-
-    setState(() {
-      final idx = _messages.indexWhere((m) => m['id'] == null);
-      if (idx != -1) {
-        _messages[idx] = {...inserted, 'decrypted_content': text};
-      }
-    });
+    if (mounted) {
+      setState(() {
+        final idx = _messages.indexWhere((m) => m['id'] == null);
+        if (idx != -1) {
+          _messages[idx] = {...inserted, 'decrypted_content': text};
+        }
+      });
+    }
   }
 
 
@@ -313,7 +374,9 @@ Future<void> _sendMessage() async {
   }
 Future<void> _uploadAndSendMedia(File file, String mediaType) async {
     if (_sending) return;
-    setState(() => _sending = true);
+    if(mounted){
+      setState(() => _sending = true);
+    }
     try {
       final ext = file.path.split('.').last;
       final path =
@@ -332,7 +395,9 @@ Future<void> _uploadAndSendMedia(File file, String mediaType) async {
         'created_at': DateTime.now().toUtc().toIso8601String(),
         'decrypted_content': null,
       };
-      setState(() => _messages.add(tempMsg));
+      if(mounted){
+        setState(() => _messages.add(tempMsg));
+      }
       _scrollToBottom();
 
       final inserted = await _supabase
@@ -346,17 +411,23 @@ Future<void> _uploadAndSendMedia(File file, String mediaType) async {
           .select()
           .single();
 
-      setState(() {
-        final idx = _messages.indexWhere((m) => m['id'] == null);
-        if (idx != -1) {
-          _messages[idx] = {...inserted, 'decrypted_content': null};
-        }
-      });
+      if(mounted){
+        setState(() {
+          final idx = _messages.indexWhere((m) => m['id'] == null);
+          if (idx != -1) {
+            _messages[idx] = {...inserted, 'decrypted_content': null};
+          }
+        });
+      }
     } catch (e) {
-      setState(() => _messages.removeWhere((m) => m['id'] == null));
+      if(mounted){
+        setState(() => _messages.removeWhere((m) => m['id'] == null));
+      }
       Get.snackbar('Error', 'Failed to send media: $e');
     } finally {
-      setState(() => _sending = false);
+if(mounted){
+  setState(() => _sending = false);
+}
     }
   }
 
