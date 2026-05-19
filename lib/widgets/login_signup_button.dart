@@ -11,10 +11,9 @@ class LoginSignupButton extends StatelessWidget {
   final VoidCallback onPressed;
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       width: double.infinity,
-      height: 40,
-      margin: const EdgeInsets.symmetric(horizontal: 100),
+      height: 45,
       child: ElevatedButton(
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(

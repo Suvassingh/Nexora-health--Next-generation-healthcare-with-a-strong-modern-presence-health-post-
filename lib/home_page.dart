@@ -1,11 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:healthpost_app/appointment_screen.dart';
+import 'package:healthpost_app/models/notification_model.dart';
 import 'package:healthpost_app/services/api_service.dart';
 import 'package:healthpost_app/widgets/home_appointment.dart';
 import 'package:healthpost_app/widgets/home_hero_header.dart';
 import 'package:healthpost_app/widgets/home_simmer.dart';
 import 'package:healthpost_app/widgets/home_stat.dart';
+import 'package:healthpost_app/widgets/notice_stripe.dart';
+import 'package:healthpost_app/widgets/recent_patient_row.dart';
+import 'package:healthpost_app/widgets/voice_fab.dart';
+import 'package:healthpost_app/widgets/weekly_chart.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:healthpost_app/app_constants.dart';
 import 'package:healthpost_app/widgets/connectivity_icon.dart';
@@ -14,6 +22,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:healthpost_app/controller/internet_status_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:healthpost_app/providers/home_provider.dart';
+
 class HomeStats {
   final int todayPatients;
   final int pending;
@@ -59,7 +68,9 @@ class AppointmentItem {
   static String _initials(String name) {
     final parts = name.trim().split(' ');
     if (parts.length >= 2) return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    return parts.isNotEmpty && parts[0].isNotEmpty ? parts[0][0].toUpperCase() : '?';
+    return parts.isNotEmpty && parts[0].isNotEmpty
+        ? parts[0][0].toUpperCase()
+        : '?';
   }
 
   static String _formatTime(dynamic iso) {
@@ -85,20 +96,10 @@ class DoctorHomeScreen extends ConsumerStatefulWidget {
 
 class _DoctorHomeScreenState extends ConsumerState<DoctorHomeScreen>
     with SingleTickerProviderStateMixin {
-  final ConnectivityController connectivityController = Get.put(ConnectivityController());
+  final ConnectivityController connectivityController = Get.put(
+    ConnectivityController(),
+  );
 
-  // // Data fields
-  // String _doctorName = '';
-  // String _specialty = '';
-  // String _healthpostName = '';
-  // String? _avatarUrl;
-  // HomeStats _stats = const HomeStats();
-  // List<AppointmentItem> _appointments = [];
-  // List<Map<String, dynamic>> _recentActivity = [];
-  //
-  // // UI state
-  // bool _loading = true;
-  // String? _error;
 
   late AnimationController _animController;
   late Animation<double> _fadeAnim;
@@ -119,50 +120,7 @@ class _DoctorHomeScreenState extends ConsumerState<DoctorHomeScreen>
     super.dispose();
   }
 
-  // Future<void> _fetchHomeData() async {
-  //   setState(() {
-  //     _loading = true;
-  //     _error = null;
-  //   });
-  //
-  //   try {
-  //
-  //     final doctorProfile = await ApiService.getDoctorProfile();
-  //     _specialty = doctorProfile['specialty'] ?? '';
-  //     _healthpostName = doctorProfile['healthpost_name'] ?? '';
-  //     _doctorName = doctorProfile['full_name'] ?? 'Doctor';
-  //     _avatarUrl = doctorProfile['avatar_url'] as String?;
-  //
-  //
-  //     final todayAppts = await ApiService.getTodayAppointments();
-  //     _appointments = todayAppts.map((json) => AppointmentItem.fromApi(json)).toList();
-  //
-  //
-  //     final monthlyAppts = await ApiService.getMonthlyAppointments();
-  //
-  //     final stats = await ApiService.getDoctorStats();
-  //     _stats = HomeStats(
-  //       todayPatients: stats['today_count'] ?? _appointments.length,
-  //       pending: stats['pending_count'] ?? _appointments.where((a) => a.status == 'pending').length,
-  //       completed: stats['completed_count'] ?? _appointments.where((a) => a.status == 'completed').length,
-  //       totalThisMonth: stats['total_this_month'] ?? monthlyAppts.length,
-  //     );
-  //     print('DEBUG stats: $stats');
-  //
-  //     _recentActivity = monthlyAppts
-  //         .where((e) => e['status'] == 'completed' || e['status'] == 'confirmed')
-  //         .take(5)
-  //         .toList();
-  //
-  //     setState(() => _loading = false);
-  //     _animController.forward();
-  //   } catch (e) {
-  //     setState(() {
-  //       _error = e.toString();
-  //       _loading = false;
-  //     });
-  //   }
-  // }
+
 
   String _greeting() {
     final hour = DateTime.now().hour;
@@ -174,31 +132,61 @@ class _DoctorHomeScreenState extends ConsumerState<DoctorHomeScreen>
   String _initials(String name) {
     final parts = name.trim().split(' ');
     if (parts.length >= 2) return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    return parts.isNotEmpty && parts[0].isNotEmpty ? parts[0][0].toUpperCase() : 'D';
+    return parts.isNotEmpty && parts[0].isNotEmpty
+        ? parts[0][0].toUpperCase()
+        : 'D';
   }
 
   String _todayLabel() {
     final d = DateTime.now();
-    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const days = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     return '${days[d.weekday - 1]}, ${d.day} ${months[d.month - 1]} ${d.year}';
   }
 
   @override
   Widget build(BuildContext context) {
-
     final homeAsync = ref.watch(homeDataProvider);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
       appBar: _buildAppBar(),
+      floatingActionButton: homeAsync.whenOrNull(
+        data: (data) => VoiceFab(
+          text:
+              '${_greeting()} Dr. ${data.doctorName}. '
+              'Today you have ${data.stats.todayPatients} patients. '
+              '${data.stats.pending} are pending and '
+              '${data.stats.completed} are completed.',
+        ),
+      ),
       body: homeAsync.when(
         loading: () => const HomeShimmer(),
 
         error: (e, _) => _buildErrorState(e.toString()),
 
         data: (data) {
-
           if (!_animController.isCompleted) {
             _animController.forward();
           }
@@ -228,13 +216,27 @@ class _DoctorHomeScreenState extends ConsumerState<DoctorHomeScreen>
       automaticallyImplyLeading: false,
       title: const Row(
         children: [
-          Image(image: AssetImage('assets/images/gov_logo.webp'), width: 36, height: 36),
+          Image(
+            image: AssetImage('assets/images/gov_logo.webp'),
+            width: 36,
+            height: 36,
+          ),
           SizedBox(width: 10),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(AppConstants.nepalSarkar, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white)),
-              Text(AppConstants.govtOfNepal, style: TextStyle(fontSize: 9, color: Colors.white70)),
+              Text(
+                AppConstants.nepalSarkar,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              Text(
+                AppConstants.govtOfNepal,
+                style: TextStyle(fontSize: 9, color: Colors.white70),
+              ),
             ],
           ),
         ],
@@ -242,9 +244,14 @@ class _DoctorHomeScreenState extends ConsumerState<DoctorHomeScreen>
       actions: [
         Obx(() {
           final ct = connectivityController.connectionType.value;
-          if (ct == ConnectivityResult.none) return const ConnectivityIndicator(icon: Icons.signal_wifi_off);
-          if (ct == ConnectivityResult.wifi) return const ConnectivityIndicator(icon: Icons.wifi);
-          if (ct == ConnectivityResult.mobile) return const ConnectivityIndicator(icon: Icons.signal_cellular_4_bar);
+          if (ct == ConnectivityResult.none)
+            return const ConnectivityIndicator(icon: Icons.signal_wifi_off);
+          if (ct == ConnectivityResult.wifi)
+            return const ConnectivityIndicator(icon: Icons.wifi);
+          if (ct == ConnectivityResult.mobile)
+            return const ConnectivityIndicator(
+              icon: Icons.signal_cellular_4_bar,
+            );
           return const SizedBox.shrink();
         }),
         IconButton(onPressed: () {}, icon: const LanguageToggleButton()),
@@ -259,7 +266,6 @@ class _DoctorHomeScreenState extends ConsumerState<DoctorHomeScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-
           HeroHeader(
             doctorName: data.doctorName,
             specialty: data.specialty,
@@ -269,19 +275,96 @@ class _DoctorHomeScreenState extends ConsumerState<DoctorHomeScreen>
             greeting: _greeting(),
             todayLabel: _todayLabel(),
           ),
+          SizedBox(height: 12),
+          NoticeStrip(notices: [],),
 
           const SizedBox(height: 20),
 
           StatsGrid(stats: data.stats),
 
+          const SizedBox(
+            height: 20,
+          ), 
+          if (data.appointments.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF1A73E8), Color(0xFF0D47A1)],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.access_time_rounded,
+                      color: Colors.white,
+                      size: 32,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Next patient',
+                            style: TextStyle(
+                              color: Colors.white60,
+                              fontSize: 11,
+                            ),
+                          ),
+                          Text(
+                            data.appointments.first.patientName,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            data.appointments.first.time,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Text(
+                        'Start',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           const SizedBox(height: 20),
-
           _SectionHeader(
             title: "Today's appointments",
             actionLabel: 'See all',
-            onAction: () {},
+            onAction: () {
+              Get.to(() => DoctorAppointmentsScreen());
+            },
           ),
 
+          const SizedBox(height: 10),
+          RecentPatientsRow(appointments:data.appointments,),
           const SizedBox(height: 10),
 
           data.appointments.isEmpty
@@ -289,17 +372,8 @@ class _DoctorHomeScreenState extends ConsumerState<DoctorHomeScreen>
               : AppointmentsList(appointments: data.appointments),
 
           const SizedBox(height: 20),
-
-          _SectionHeader(
-            title: 'Quick actions',
-            actionLabel: '',
-            onAction: null,
-          ),
-
-          const SizedBox(height: 10),
-
-          const _QuickActions(),
-
+WeeklyChart(dailyCounts:data.weeklyCount ),
+          
           const SizedBox(height: 20),
         ],
       ),
@@ -311,7 +385,6 @@ class _DoctorHomeScreenState extends ConsumerState<DoctorHomeScreen>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-
           const Icon(Icons.cloud_off_rounded, size: 64),
 
           const SizedBox(height: 16),
@@ -329,13 +402,12 @@ class _DoctorHomeScreenState extends ConsumerState<DoctorHomeScreen>
               ref.invalidate(homeDataProvider);
             },
             child: const Text("Retry"),
-          )
+          ),
         ],
       ),
     );
   }
 }
-
 
 class _SectionHeader extends StatelessWidget {
   final String title;
@@ -421,122 +493,5 @@ class _EmptyAppointments extends StatelessWidget {
     );
   }
 }
-
-class _QuickActions extends StatelessWidget {
-  const _QuickActions();
-
-  @override
-  Widget build(BuildContext context) {
-    final actions = [
-      _QuickAction(
-        icon: Icons.person_add_outlined,
-        label: 'New patient',
-        color: AppConstants.primaryColor,
-        bg: const Color(0xFFE8F4FD),
-        onTap: () {},
-      ),
-      _QuickAction(
-        icon: Icons.calendar_month_outlined,
-        label: 'Schedule',
-        color: const Color(0xFF8E44AD),
-        bg: const Color(0xFFF5EEF8),
-        onTap: () {},
-      ),
-      _QuickAction(
-        icon: Icons.description_outlined,
-        label: 'Prescription',
-        color: const Color(0xFF27AE60),
-        bg: const Color(0xFFEAF7EF),
-        onTap: () {},
-      ),
-      _QuickAction(
-        icon: Icons.chat_bubble_outline_rounded,
-        label: 'Messages',
-        color: const Color(0xFFF39C12),
-        bg: const Color(0xFFFFF8E8),
-        onTap: () {},
-      ),
-    ];
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: actions
-            .map(
-              (a) => Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: a,
-                ),
-              ),
-            )
-            .toList(),
-      ),
-    );
-  }
-}
-
-class _QuickAction extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final Color bg;
-  final VoidCallback onTap;
-
-  const _QuickAction({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.bg,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: bg,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: color, size: 20),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF374151),
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-
-
 
 

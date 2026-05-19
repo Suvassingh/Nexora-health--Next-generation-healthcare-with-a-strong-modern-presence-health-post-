@@ -210,26 +210,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _conversationId = await _getOrCreateConversation();
     await _fetchAndDecryptAESKey(); // retry
   }
-  // Future<void> _fetchAndDecryptAESKey() async {
-  //   final conv = await _supabase
-  //       .from('conversations')
-  //       .select('aes_key_encrypted_for_doctor')
-  //       .eq('id', _conversationId!)
-  //       .single();
-  //
-  //   final encKey = conv['aes_key_encrypted_for_doctor'] as String?;
-  //   if (encKey == null) throw Exception('No AES key found in conversation');
-  //
-  //   final privKey = EncryptionService.parsePrivateKeyFromPem(
-  //     _currentUserPrivateKeyPem!,
-  //   );
-  //   final aesB64 = EncryptionService.decryptWithRSA(encKey, privKey);
-  //   if (!_isValidBase64(aesB64)) {
-  //     debugPrint('Decrypted AES key is not valid Base64: "$aesB64"');
-  //     throw Exception('Corrupted AES key – please regenerate conversation');
-  //   }
-  //   _aesKey = encrypt.Key.fromBase64(aesB64);
-  // }
+  
   bool _isValidBase64(String str) {
     try {
       base64Decode(str);

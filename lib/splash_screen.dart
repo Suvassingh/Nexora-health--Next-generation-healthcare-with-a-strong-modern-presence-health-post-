@@ -25,12 +25,12 @@ class _SplashScreenState extends State<SplashScreen> {
         setState(() {
           _percentage += 1;
         });
-        // ❌ REMOVED: navigation from inside the increment block
+        
       } else {
         timer.cancel();
         // Get.offAll(() => const HomeScreen());
 
-        // ✅ Navigate once here, with correct auth check
+        
         if (supabase.auth.currentSession == null) {
           Get.offAll(() => LoginScreen());
         } else {

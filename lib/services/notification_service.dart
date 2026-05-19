@@ -1,157 +1,196 @@
-// import 'package:firebase_messaging/firebase_messaging.dart';
-// import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-// import 'package:supabase_flutter/supabase_flutter.dart';
-//
-// // ─────────────────────────────────────────────────────────────────────────────
-// // Background handler (runs in a separate isolate)
-// // ─────────────────────────────────────────────────────────────────────────────
-// @pragma('vm:entry-point')
-// Future<void> firebaseBackgroundHandler(RemoteMessage message) async {
-//   // Create a fresh plugin instance for this isolate
-//   final local = FlutterLocalNotificationsPlugin();
-//
-//   // Initialize with the same settings as the main isolate
-//   const android = AndroidInitializationSettings('@mipmap/ic_launcher');
-//   const ios = DarwinInitializationSettings();
-//   const settings = InitializationSettings(android: android, iOS: ios);
-//
-//   //  Version 20.1.0: initialize takes a POSITIONAL argument
-//   await local.initialize(settings);
-//
-//   // Show the notification using this isolate's plugin
-//   await NotificationService.showLocalWithInstance(local, message);
-// }
-//
-// class NotificationService {
-//   static final _fcm = FirebaseMessaging.instance;
-//   static final _local = FlutterLocalNotificationsPlugin();
-//   static final _supa = Supabase.instance.client;
-//
-//   static const _channel = AndroidNotificationChannel(
-//     'healthpost_main',
-//     'HealthPost Notifications',
-//     description: 'Appointment and call notifications',
-//     importance: Importance.high,
-//   );
-//
-//   static Future<void> init() async {
-//     // 1. Request permissions
-//     await _fcm.requestPermission(alert: true, badge: true, sound: true);
-//
-//     // 2. Create Android notification channel
-//     await _local
-//         .resolvePlatformSpecificImplementation<
-//         AndroidFlutterLocalNotificationsPlugin>()
-//         ?.createNotificationChannel(_channel);
-//
-//     // 3. Initialize local notifications (main isolate)
-//     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
-//     const ios = DarwinInitializationSettings();
-//     const settings = InitializationSettings(android: android, iOS: ios);
-//
-//     //  Version 20.1.0: initialize takes a POSITIONAL argument
-//     await _local.initialize(
-//       settings,
-//       onDidReceiveNotificationResponse: _onNotificationTap,
-//     );
-//
-//     // 4. Set background message handler
-//     FirebaseMessaging.onBackgroundMessage(firebaseBackgroundHandler);
-//
-//     // 5. Handle foreground messages
-//     FirebaseMessaging.onMessage.listen(showLocal);
-//
-//     // 6. Handle notification tap when app is opened from background
-//     FirebaseMessaging.onMessageOpenedApp.listen(_handleNavigate);
-//
-//     // 7. Save FCM token
-//     await _saveToken();
-//     _fcm.onTokenRefresh.listen((_) => _saveToken());
-//   }
-//
-//   // ─────────────────────────────────────────────────────────────────────────
-//   // Save token to Supabase
-//   // ─────────────────────────────────────────────────────────────────────────
-//   static Future<void> _saveToken() async {
-//     final uid = _supa.auth.currentUser?.id;
-//     final token = await _fcm.getToken();
-//     if (uid == null || token == null) return;
-//
-//     await _supa
-//         .from('user_profiles')
-//         .update({
-//       'fcm_token': token,
-//       'fcm_updated_at': DateTime.now().toIso8601String(),
-//     })
-//         .eq('id', uid);
-//   }
-//
-//   // ─────────────────────────────────────────────────────────────────────────
-//   // Show notification (foreground) using main plugin instance
-//   // ─────────────────────────────────────────────────────────────────────────
-//   static Future<void> showLocal(RemoteMessage message) async {
-//     await showLocalWithInstance(_local, message);
-//   }
-//
-//   // ─────────────────────────────────────────────────────────────────────────
-//   // Show notification using a given plugin instance (used by both isolates)
-//   // ─────────────────────────────────────────────────────────────────────────
-//   static Future<void> showLocalWithInstance(
-//       FlutterLocalNotificationsPlugin local,
-//       RemoteMessage message,
-//       ) async {
-//     final n = message.notification;
-//     if (n == null) return;
-//
-//     final id = message.messageId?.hashCode ?? DateTime.now().millisecondsSinceEpoch;
-//
-//     //  Version 20.1.0: show uses NAMED parameters
-//     await local.show(
-//       id: id,
-//       title: n.title ?? '',
-//       body: n.body ?? '',
-//       notificationDetails: NotificationDetails(
-//         android: AndroidNotificationDetails(
-//           _channel.id,
-//           _channel.name,
-//           channelDescription: _channel.description,
-//           importance: Importance.high,
-//           priority: Priority.high,
-//           icon: '@mipmap/ic_launcher',
-//         ),
-//         iOS: const DarwinNotificationDetails(
-//           presentAlert: true,
-//           presentBadge: true,
-//           presentSound: true,
-//         ),
-//       ),
-//       payload: message.data['route']?.toString(),
-//     );
-//   }
-//
-//   // ─────────────────────────────────────────────────────────────────────────
-//   // Handle tap on local notification (when app is in foreground or background)
-//   // ─────────────────────────────────────────────────────────────────────────
-//   static void _onNotificationTap(NotificationResponse response) {
-//     final route = response.payload;
-//     if (route == 'appointments') {
-//       print("Navigate to appointments screen");
-//       // TODO: Add actual navigation logic
-//     } else if (route == 'call') {
-//       print("Navigate to call screen");
-//       // TODO: Add actual navigation logic
-//     }
-//   }
-//
-//   // ─────────────────────────────────────────────────────────────────────────
-//   // Handle app opened from a notification (via Firebase)
-//   // ─────────────────────────────────────────────────────────────────────────
-//   static void _handleNavigate(RemoteMessage message) {
-//     _onNotificationTap(
-//       NotificationResponse(
-//         notificationResponseType: NotificationResponseType.selectedNotification,
-//         payload: message.data['route']?.toString(),
-//       ),
-//     );
-//   }
-// }
+
+
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:get/get.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../models/notification_model.dart';
+import '../appointment_screen.dart'; 
+import '../chat_screen.dart'; 
+
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+}
+
+class NotificationService {
+  NotificationService._();
+  static final NotificationService instance = NotificationService._();
+
+  final _messaging = FirebaseMessaging.instance;
+  final _localNotifications = FlutterLocalNotificationsPlugin();
+  final _supabase = Supabase.instance.client;
+
+  final _inAppController = StreamController<AppNotification>.broadcast();
+  Stream<AppNotification> get inAppStream => _inAppController.stream;
+
+  RealtimeChannel? _realtimeChannel;
+
+  Future<void> initialize() async {
+    await _messaging.requestPermission(alert: true, badge: true, sound: true);
+    await _initLocalNotifications();
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
+    final initial = await _messaging.getInitialMessage();
+    if (initial != null) _handleNotificationTap(initial);
+    await _saveToken();
+    _messaging.onTokenRefresh.listen(_uploadToken);
+  }
+
+  Future<void> onUserLoggedIn() async {
+    await _saveToken();
+    _subscribeRealtime();
+  }
+
+  Future<void> onUserLoggedOut() async {
+    await _unsubscribeRealtime();
+    await _deleteToken();
+  }
+
+  Future<void> _initLocalNotifications() async {
+    const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const iOS = DarwinInitializationSettings();
+    await _localNotifications.initialize(
+      const InitializationSettings(android: android, iOS: iOS),
+      onDidReceiveNotificationResponse: (details) {
+        if (details.payload != null) {
+          _routeFromPayload(
+            jsonDecode(details.payload!) as Map<String, dynamic>,
+          );
+        }
+      },
+    );
+    if (Platform.isAndroid) {
+      await _localNotifications
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >()
+          ?.createNotificationChannel(
+            const AndroidNotificationChannel(
+              'healthpost_channel',
+              'HealthPost Notifications',
+              description: 'Appointment and consultation alerts',
+              importance: Importance.high,
+              playSound: true,
+            ),
+          );
+    }
+  }
+
+  Future<void> _showLocalNotification(RemoteMessage message) async {
+    final notification = message.notification;
+    if (notification == null) return;
+    await _localNotifications.show(
+      message.hashCode,
+      notification.title,
+      notification.body,
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          'healthpost_channel',
+          'HealthPost Notifications',
+          importance: Importance.high,
+          priority: Priority.high,
+          icon: '@mipmap/ic_launcher',
+        ),
+        iOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      ),
+      payload: jsonEncode(message.data),
+    );
+  }
+
+  Future<void> _saveToken() async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return;
+    final token = await _messaging.getToken();
+    if (token == null) return;
+    await _uploadToken(token);
+  }
+
+  Future<void> _uploadToken(String token) async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return;
+    await _supabase.from('fcm_tokens').upsert({
+      'user_id': userId,
+      'token': token,
+      'platform': Platform.isAndroid ? 'android' : 'ios',
+      'updated_at': DateTime.now().toIso8601String(),
+    }, onConflict: 'token');
+  }
+
+  Future<void> _deleteToken() async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return;
+    final token = await _messaging.getToken();
+    if (token == null) return;
+    await _supabase
+        .from('fcm_tokens')
+        .delete()
+        .eq('user_id', userId)
+        .eq('token', token);
+    await _messaging.deleteToken();
+  }
+
+  void _subscribeRealtime() {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return;
+    _realtimeChannel = _supabase
+        .channel('notifications:$userId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'notifications',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: userId,
+          ),
+          callback: (payload) {
+            _inAppController.add(AppNotification.fromJson(payload.newRecord));
+          },
+        )
+        .subscribe();
+  }
+
+  Future<void> _unsubscribeRealtime() async {
+    if (_realtimeChannel != null) {
+      await _supabase.removeChannel(_realtimeChannel!);
+      _realtimeChannel = null;
+    }
+  }
+
+  Future<void> _handleForegroundMessage(RemoteMessage message) async {
+    await _showLocalNotification(message);
+  }
+
+  void _handleNotificationTap(RemoteMessage message) {
+    _routeFromPayload(message.data);
+  }
+
+  void _routeFromPayload(Map<String, dynamic> data) {
+    final type = data['type'] as String?;
+    switch (type) {
+      case 'new_appointment':
+      case 'appointment_cancelled':
+        Get.to(() => const DoctorAppointmentsScreen());
+        break;
+      case 'chat_message':
+       
+        break;
+      default:
+        break;
+    }
+  }
+
+  void dispose() => _inAppController.close();
+}

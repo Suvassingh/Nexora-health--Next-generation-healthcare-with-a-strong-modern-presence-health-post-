@@ -9,6 +9,8 @@ class HomeData {
   final String? avatarUrl;
   final HomeStats stats;
   final List<AppointmentItem> appointments;
+  final List<int> weeklyCount;
+
   final List<Map<String, dynamic>> recentActivity;
 
   const HomeData({
@@ -18,6 +20,7 @@ class HomeData {
     required this.avatarUrl,
     required this.stats,
     required this.appointments,
+    required this.weeklyCount,
     required this.recentActivity,
   });
 }
@@ -46,7 +49,14 @@ final homeDataProvider = FutureProvider<HomeData>((ref) async {
       .where((e) => e['status'] == 'completed' || e['status'] == 'confirmed')
       .take(5)
       .toList();
-
+  List<int> weeklyCount = List.filled(7, 0);
+  for (var appt in monthlyAppts) {
+    if (appt['scheduled_at'] != null) {
+      final date = DateTime.parse(appt['scheduled_at']).toLocal();
+      final weekdayIndex = date.weekday - 1; // Monday = 0
+      weeklyCount[weekdayIndex]++;
+    }
+  }
   return HomeData(
     doctorName: doctorProfile['full_name'] ?? 'Doctor',
     specialty: doctorProfile['specialty'] ?? '',
@@ -54,6 +64,7 @@ final homeDataProvider = FutureProvider<HomeData>((ref) async {
     avatarUrl: doctorProfile['avatar_url'] as String?,
     stats: homeStats,
     appointments: appointments,
+    weeklyCount: weeklyCount,
     recentActivity: recentActivity,
   );
 });

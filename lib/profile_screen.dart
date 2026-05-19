@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import 'package:healthpost_app/controller/locale_conreoller.dart';
 import 'package:healthpost_app/models/doctor_model.dart';
 import 'package:healthpost_app/providers/profile_providers.dart';
+import 'package:healthpost_app/services/tts_service.dart';
 
 import 'package:healthpost_app/widgets/dropdown_inputfield.dart';
 import 'package:healthpost_app/widgets/edit_field.dart';
@@ -15,16 +16,17 @@ import 'package:healthpost_app/widgets/read_only_field.dart';
 import 'package:healthpost_app/widgets/settings.dart';
 import 'package:healthpost_app/widgets/shimmer_anim.dart';
 import 'package:healthpost_app/widgets/start_stripe.dart';
+import 'package:healthpost_app/widgets/voice_fab.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:healthpost_app/app_constants.dart';
 import 'package:healthpost_app/login_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-
 class DoctorProfileScreen extends ConsumerStatefulWidget {
   const DoctorProfileScreen({super.key});
   @override
-  ConsumerState<DoctorProfileScreen> createState() => _DoctorProfileScreenState();
+  ConsumerState<DoctorProfileScreen> createState() =>
+      _DoctorProfileScreenState();
 }
 
 class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen>
@@ -92,7 +94,6 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen>
     _qualificationCtrl = TextEditingController();
     _experienceCtrl = TextEditingController();
     _healthpostCtrl = TextEditingController();
-
   }
 
   @override
@@ -105,6 +106,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen>
     _qualificationCtrl.dispose();
     _experienceCtrl.dispose();
     _healthpostCtrl.dispose();
+    TtsService().stop();
     super.dispose();
   }
 
@@ -225,6 +227,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen>
         _saving = false;
       });
       _showSnack('Profile updated successfully');
+
     } catch (e) {
       setState(() => _saving = false);
       _showSnack('Failed to save: ${e.toString()}', isError: true);
@@ -264,7 +267,6 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen>
     } catch (_) {}
   }
 
-
   Future<void> _logout() async {
     final ok = await showDialog<bool>(
       context: context,
@@ -275,7 +277,6 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen>
       Get.offAll(() => LoginScreen());
     }
   }
-
 
   String _initials(String name) {
     final p = name.trim().split(' ');
@@ -307,13 +308,23 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen>
     }
   }
 
+  void _speakProfileGreeting(DoctorProfileModel d, String lang) {
+    final isNepali = lang == 'nepali';
+    final text = isNepali
+        ? 'नमस्ते डाक्टर ${d.fullName}। तपाईंको प्रोफाइल लोड भयो।'
+        : 'Hello Dr. ${d.fullName}. Your profile has loaded.';
+    TtsService().speak(text);
+  }
+
   String _cap(String? s) {
     if (s == null || s.isEmpty) return '—';
     return s[0].toUpperCase() + s.substring(1);
   }
+
   Future<void> _refresh() async {
     ref.invalidate(doctorProfileProvider);
   }
+
   @override
   Widget build(BuildContext context) {
     final profileAsync = ref.watch(doctorProfileProvider);
@@ -321,6 +332,20 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen>
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
       appBar: _buildAppBar(),
+      floatingActionButton: (!_editMode && doctor != null)
+          ? VoiceFab(
+        language: doctor!.preferredLanguage == 'nepali' ? 'ne-NP' : 'en-US',
+        text: doctor!.preferredLanguage == 'nepali'
+            ? 'नमस्ते डाक्टर ${doctor!.fullName}। '
+            'तपाईंको विशेषज्ञता ${doctor!.specialty} हो। '
+            'तपाईंसँग ${doctor!.experienceYears ?? 0} वर्षको अनुभव छ। '
+            'तपाईं ${doctor!.healthpostName} मा कार्यरत हुनुहुन्छ।'
+            : 'Hello Dr. ${doctor!.fullName}. '
+            'Specialty: ${doctor!.specialty}. '
+            'Experience: ${doctor!.experienceYears ?? 0} years. '
+            'Health post: ${doctor!.healthpostName}.',
+      )
+          : null,
       body: profileAsync.when(
         loading: () => const Shimmer(),
         error: (e, _) => ErrorState(
@@ -343,6 +368,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen>
                 final lang = data.preferredLanguage ?? 'english';
                 _localeCtrl.setLocale(lang == 'nepali' ? 'np' : 'en');
                 if (!_animController.isCompleted) _animController.forward();
+                _speakProfileGreeting(data, lang);
               }
             });
           }
@@ -362,6 +388,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen>
       ),
     );
   }
+
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
       backgroundColor: AppConstants.primaryColor,
@@ -481,6 +508,24 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen>
                     ),
                   ),
           ),
+          IconButton(
+            icon: const Icon(Icons.volume_up_rounded, color: Colors.white),
+            tooltip: 'Read profile aloud',
+            onPressed: () {
+              if (doctor == null) return;
+              final isNepali = (doctor!.preferredLanguage ?? '') == 'nepali';
+              final text = isNepali
+                  ? 'नाम: ${doctor!.fullName}। '
+                        'विशेषज्ञता: ${doctor!.specialty}। '
+                        'अनुभव: ${doctor!.experienceYears ?? 0} वर्ष। '
+                        'स्वास्थ्य चौकी: ${doctor!.healthpostName}।'
+                  : 'Name: ${doctor!.fullName}. '
+                        'Specialty: ${doctor!.specialty}. '
+                        'Experience: ${doctor!.experienceYears ?? 0} years. '
+                        'Health post: ${doctor!.healthpostName}.';
+              TtsService().speak(text);
+            },
+          ),
         ],
       ],
     );
@@ -492,7 +537,6 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen>
       physics: const AlwaysScrollableScrollPhysics(),
       child: Column(
         children: [
-  
           if (_editMode)
             Container(
               width: double.infinity,
@@ -533,7 +577,6 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen>
           StatsStrip(doctor: d),
           const SizedBox(height: 20),
 
-          
           _editMode
               ? EditSection(
                   sectionIcon: Icons.person_outline_rounded,
@@ -801,7 +844,7 @@ class _PersonalEditForm extends StatelessWidget {
           onChanged: onGenderChanged,
         ),
         const SizedBox(height: 14),
-        // Email — read-only (managed by Supabase Auth)
+        
         ReadOnlyField(
           icon: Icons.email_outlined,
           label: 'Email (read-only)',

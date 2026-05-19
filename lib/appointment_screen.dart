@@ -1,12 +1,18 @@
 
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:get/get.dart';
 import 'package:healthpost_app/call_screen.dart';
 import 'package:healthpost_app/chat_screen.dart';
+import 'package:healthpost_app/models/notification_model.dart';
+import 'package:healthpost_app/notification_screen.dart';
 import 'package:healthpost_app/providers/appointment_provider.dart';
+import 'package:healthpost_app/providers/notification_provider.dart';
+import 'package:healthpost_app/services/notification_service.dart';
 import 'package:healthpost_app/widgets/appointment/appointment_card.dart';
 import 'package:healthpost_app/widgets/appointment/bottomsheet.dart';
 import 'package:healthpost_app/app_constants.dart';
@@ -27,15 +33,25 @@ class _DoctorAppointmentsScreenState
     with SingleTickerProviderStateMixin {
   late TabController _tabCtrl;
   bool _processing = false;
+  StreamSubscription<AppNotification>? _notifSub;
 
   @override
   void initState() {
     super.initState();
     _tabCtrl = TabController(length: 5, vsync: this);
+    // Wire realtime in-app notifications
+    _notifSub = NotificationService.instance.inAppStream.listen((n) {
+      ref.read(notificationProvider.notifier).addNew(n);
+      // Also refresh appointments if it's a patient booking
+      if (n.type == 'new_appointment') {
+        ref.read(appointmentsProvider.notifier).refresh();
+      }
+    });
   }
 
   @override
   void dispose() {
+        _notifSub?.cancel();
     _tabCtrl.dispose();
     super.dispose();
   }
@@ -293,6 +309,55 @@ class _DoctorAppointmentsScreenState
         icon: const Icon(Icons.refresh_rounded, color: Colors.white),
         onPressed: () =>
             ref.read(appointmentsProvider.notifier).refresh(),
+      ),
+      Consumer(
+        builder: (context, ref, _) {
+          final unread = ref.watch(notificationProvider).unreadCount;
+          return Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: GestureDetector(
+              onTap: () => Get.to(() => const NotificationScreen()),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const Icon(
+                    Icons.notifications_outlined,
+                    color: Colors.white,
+                    size: 26,
+                  ),
+                  if (unread > 0)
+                    Positioned(
+                      right: -4,
+                      top: -4,
+                      child: Container(
+                        width: 18,
+                        height: 18,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFEF4444),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: Text(
+                            unread > 99 ? '99+' : '$unread',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+      //  Original refresh button 
+      IconButton(
+        icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+        onPressed: () => ref.read(appointmentsProvider.notifier).refresh(),
       ),
     ],
     bottom: TabBar(

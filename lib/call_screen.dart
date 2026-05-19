@@ -1,17 +1,14 @@
-// lib/screens/call_screen.dart
-// Works in BOTH apps — adjust import paths for your package name.
+
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-// !! Adjust imports to your app's package !!
-// import 'package:patient_app/services/webrtc_service.dart';
-// import 'package:patient_app/services/api_service.dart';
 import '../services/webrtc_service.dart';
 import '../services/api_service.dart';
 
@@ -20,7 +17,7 @@ class CallScreen extends StatefulWidget {
   final String remoteUserId;
   final String remoteUserName;
   final bool isVideo;
-  final bool isCaller; // true = outgoing call, false = incoming
+  final bool isCaller;
 
   const CallScreen({
     super.key,
@@ -35,34 +32,48 @@ class CallScreen extends StatefulWidget {
   State<CallScreen> createState() => _CallScreenState();
 }
 
-class _CallScreenState extends State<CallScreen> {
+class _CallScreenState extends State<CallScreen>
+    with SingleTickerProviderStateMixin {
+
   final _webrtc = WebRTCService();
-  final _localRenderer = RTCVideoRenderer();
+  final _localRenderer  = RTCVideoRenderer();
   final _remoteRenderer = RTCVideoRenderer();
   final _supabase = Supabase.instance.client;
 
-  bool _muted = false;
-  bool _cameraOff = false;
-  bool _speakerOn = true;
-  bool _connected = false;
-  bool _loading = true;
-  bool _ended = false;
+  bool _muted      = false;
+  bool _cameraOff  = false;
+  bool _speakerOn  = true;
+  bool _connected  = false;
+  bool _loading    = true;
+  bool _ended      = false;
+  bool _controlsVisible = true;
 
   String _statusText = 'Connecting…';
-  Timer? _timer;
+  Timer? _callTimer;
+  Timer? _controlsTimer;
   int _seconds = 0;
 
   RealtimeChannel? _callWatcher;
 
+  // Controls auto-hide animation
+  late final AnimationController _ctrlAnim;
+  late final Animation<double> _ctrlFade;
+
   String get _currentUserId => _supabase.auth.currentUser!.id;
 
-  // ── INIT ──────────────────────────────────────────────────────────────────
+  //  INIT 
 
   @override
   void initState() {
     super.initState();
-    // Lock to portrait so video layout is predictable
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+
+    _ctrlAnim = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 250),
+      value: 1,
+    );
+    _ctrlFade = CurvedAnimation(parent: _ctrlAnim, curve: Curves.easeInOut);
+
     _init();
     _watchCallStatus();
   }
@@ -75,12 +86,12 @@ class _CallScreenState extends State<CallScreen> {
       if (!mounted) return;
       setState(() {
         _remoteRenderer.srcObject = stream;
-        _connected = true;
+        _connected  = true;
         _statusText = 'Connected';
       });
-      _startTimer();
-      // Turn on speaker automatically for video calls
+      _startCallTimer();
       if (widget.isVideo) _webrtc.setSpeaker(true);
+      _scheduleControlsHide();
     };
 
     _webrtc.onCallEnded = () {
@@ -92,84 +103,111 @@ class _CallScreenState extends State<CallScreen> {
       if (mounted) setState(() => _localRenderer.srcObject = local);
 
       if (widget.isCaller) {
-        setState(() => _statusText = 'Ringing…');
+        if (mounted) setState(() => _statusText = 'Ringing…');
         await _webrtc.startAsCallerCall(
           callId: widget.callId,
           currentUserId: _currentUserId,
           isVideo: widget.isVideo,
         );
       } else {
-        setState(() => _statusText = 'Connecting…');
+        if (mounted) setState(() => _statusText = 'Connecting…');
         await _webrtc.startAsCalleeCall(
           callId: widget.callId,
           currentUserId: _currentUserId,
           isVideo: widget.isVideo,
         );
-        // Mark call as accepted
-        await ApiService.dio.patch(
-          '/calls/${widget.callId}/status',
-          data: {'status': 'accepted'},
+        await ApiService.updateCallStatus(
+          callId: widget.callId,
+          status: 'accepted',
         );
       }
     } catch (e) {
-      if (mounted) Get.snackbar('Call Error', e.toString());
-      Get.back();
+      if (mounted) {
+        Get.snackbar('Call Error', e.toString(),
+          backgroundColor: Colors.red.shade800,
+          colorText: Colors.white,
+        );
+        Get.back();
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  // ── CALL STATUS WATCHER ───────────────────────────────────────────────────
+  //  CALL STATUS WATCHER 
 
   void _watchCallStatus() {
     _callWatcher = _supabase
         .channel('call_watch_${widget.callId}_$_currentUserId')
         .onPostgresChanges(
-          event: PostgresChangeEvent.update,
-          schema: 'public',
-          table: 'calls',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'id',
-            value: widget.callId,
-          ),
-          callback: (payload) {
-            final status = payload.newRecord['status'] as String?;
-            if ((status == 'ended' || status == 'declined') && !_ended) {
-              _endCall(sendSignal: false);
-            }
-          },
-        )
+      event: PostgresChangeEvent.update,
+      schema: 'public',
+      table: 'calls',
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'id',
+        value: widget.callId,
+      ),
+      callback: (payload) {
+        final status = payload.newRecord['status'] as String?;
+        if ((status == 'ended' || status == 'declined') && !_ended) {
+          _endCall(sendSignal: false);
+        }
+      },
+    )
         .subscribe();
   }
 
-  // ── TIMER ─────────────────────────────────────────────────────────────────
+  //  TIMER 
 
-  void _startTimer() {
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+  void _startCallTimer() {
+    _callTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() => _seconds++);
     });
   }
 
   String get _timerLabel {
-    final m = (_seconds ~/ 60).toString().padLeft(2, '0');
-    final s = (_seconds % 60).toString().padLeft(2, '0');
-    return '$m:$s';
+    final h = _seconds ~/ 3600;
+    final m = (_seconds % 3600) ~/ 60;
+    final s = _seconds % 60;
+    if (h > 0) {
+      return '${h.toString().padLeft(2,'0')}:${m.toString().padLeft(2,'0')}:${s.toString().padLeft(2,'0')}';
+    }
+    return '${m.toString().padLeft(2,'0')}:${s.toString().padLeft(2,'0')}';
   }
 
-  // ── END CALL ──────────────────────────────────────────────────────────────
+  //  CONTROLS AUTO-HIDE 
+
+  void _scheduleControlsHide() {
+    _controlsTimer?.cancel();
+    if (!_controlsVisible) {
+      setState(() => _controlsVisible = true);
+      _ctrlAnim.forward();
+    }
+    _controlsTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted && widget.isVideo && _connected) {
+        setState(() => _controlsVisible = false);
+        _ctrlAnim.reverse();
+      }
+    });
+  }
+
+  void _onTapScreen() => _scheduleControlsHide();
+
+  //  END CALL 
 
   Future<void> _endCall({bool sendSignal = true}) async {
     if (_ended) return;
     _ended = true;
-    _timer?.cancel();
+    _callTimer?.cancel();
+    _controlsTimer?.cancel();
 
     if (sendSignal) {
       await _webrtc.hangup();
       try {
-        await ApiService.dio.patch(
-          '/calls/${widget.callId}/status',
-          data: {'status': 'ended'},
+        await ApiService.updateCallStatus(
+          callId: widget.callId,
+          status: 'ended',
         );
       } catch (_) {}
     } else {
@@ -179,11 +217,13 @@ class _CallScreenState extends State<CallScreen> {
     if (mounted) Get.back();
   }
 
-  // ── DISPOSE ───────────────────────────────────────────────────────────────
+  //  DISPOSE 
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _callTimer?.cancel();
+    _controlsTimer?.cancel();
+    _ctrlAnim.dispose();
     _callWatcher?.unsubscribe();
     _localRenderer.dispose();
     _remoteRenderer.dispose();
@@ -192,7 +232,7 @@ class _CallScreenState extends State<CallScreen> {
     super.dispose();
   }
 
-  // ── BUILD ─────────────────────────────────────────────────────────────────
+  //  BUILD 
 
   @override
   Widget build(BuildContext context) {
@@ -200,87 +240,148 @@ class _CallScreenState extends State<CallScreen> {
       canPop: false,
       onPopInvoked: (_) => _endCall(),
       child: Scaffold(
-        backgroundColor: const Color(0xFF1A1A2E),
-        body: Stack(
-          children: [
-            // ── BACKGROUND / REMOTE VIDEO ───────────────────────────────────
-            if (widget.isVideo && _connected)
-              Positioned.fill(
-                child: RTCVideoView(
+        backgroundColor: Colors.black,
+        body: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _onTapScreen,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              //  REMOTE VIDEO / AUDIO BG 
+              if (widget.isVideo && _connected)
+                RTCVideoView(
                   _remoteRenderer,
                   objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                ),
-              )
-            else
-              _AudioBackground(name: widget.remoteUserName),
+                )
+              else
+                _AudioCallBackground(name: widget.remoteUserName),
 
-            // ── LOCAL PIP ───────────────────────────────────────────────────
-            if (widget.isVideo)
+              //  LOCAL PIP (video only) 
+              if (widget.isVideo)
+                Positioned(
+                  top: MediaQuery.of(context).padding.top + 16,
+                  right: 16,
+                  child: _LocalPip(renderer: _localRenderer),
+                ),
+
+              //  TOP INFO BAR 
+              FadeTransition(
+                opacity: _ctrlFade,
+                child: _TopBar(
+                  name: widget.remoteUserName,
+                  statusText: _connected ? _timerLabel : _statusText,
+                  isVideo: widget.isVideo,
+                  isConnected: _connected,
+                ),
+              ),
+
+              //  BOTTOM CONTROLS 
               Positioned(
-                top: MediaQuery.of(context).padding.top + 16,
-                right: 16,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(14),
-                  child: SizedBox(
-                    width: 100,
-                    height: 140,
-                    child: RTCVideoView(
-                      _localRenderer,
-                      mirror: true,
-                      objectFit:
-                          RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                    ),
+                bottom: 0, left: 0, right: 0,
+                child: FadeTransition(
+                  opacity: _ctrlFade,
+                  child: _BottomControls(
+                    isVideo: widget.isVideo,
+                    muted: _muted,
+                    cameraOff: _cameraOff,
+                    speakerOn: _speakerOn,
+                    onMute: () => setState(() {
+                      _muted = !_muted;
+                      _webrtc.setMuted(_muted);
+                    }),
+                    onCamera: () => setState(() {
+                      _cameraOff = !_cameraOff;
+                      _webrtc.setCameraOff(_cameraOff);
+                    }),
+                    onSpeaker: () => setState(() {
+                      _speakerOn = !_speakerOn;
+                      _webrtc.setSpeaker(_speakerOn);
+                    }),
+                    onFlip: _webrtc.switchCamera,
+                    onEnd: () => _endCall(),
                   ),
                 ),
               ),
 
-            // ── TOP BAR ─────────────────────────────────────────────────────
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: _TopBar(
-                name: widget.remoteUserName,
-                statusText: _connected ? _timerLabel : _statusText,
-                hasGradient: widget.isVideo && _connected,
-              ),
-            ),
+              //  LOADING OVERLAY 
+              if (_loading)
+                Container(
+                  color: Colors.black87,
+                  child: const Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2.5,
+                        ),
+                        SizedBox(height: 20),
+                        Text(
+                          'Setting up call…',
+                          style: TextStyle(color: Colors.white70, fontSize: 14),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
-            // ── BOTTOM CONTROLS ─────────────────────────────────────────────
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: _BottomControls(
-                isVideo: widget.isVideo,
-                muted: _muted,
-                cameraOff: _cameraOff,
-                speakerOn: _speakerOn,
-                onMute: () => setState(() {
-                  _muted = !_muted;
-                  _webrtc.setMuted(_muted);
-                }),
-                onCamera: () => setState(() {
-                  _cameraOff = !_cameraOff;
-                  _webrtc.setCameraOff(_cameraOff);
-                }),
-                onSpeaker: () => setState(() {
-                  _speakerOn = !_speakerOn;
-                  _webrtc.setSpeaker(_speakerOn);
-                }),
-                onFlip: () => _webrtc.switchCamera(),
-                onEnd: () => _endCall(),
-              ),
-            ),
+//  AUDIO CALL BACKGROUND 
 
-            // ── LOADING OVERLAY ─────────────────────────────────────────────
-            if (_loading)
-              const ColoredBox(
-                color: Colors.black54,
-                child: Center(
-                  child: CircularProgressIndicator(color: Colors.white),
+class _AudioCallBackground extends StatelessWidget {
+  final String name;
+  const _AudioCallBackground({required this.name});
+
+  @override
+  Widget build(BuildContext context) {
+    final initials = name.trim().split(' ').map((w) => w.isNotEmpty ? w[0] : '').take(2).join();
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF0D2137), Color(0xFF0A1628), Color(0xFF060E1A)],
+        ),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 110,
+              height: 110,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF1976D2), Color(0xFF0D47A1)],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF1565C0).withOpacity(0.5),
+                    blurRadius: 40,
+                    spreadRadius: 8,
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Text(
+                  initials.toUpperCase(),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 38,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
+            ),
           ],
         ),
       ),
@@ -288,69 +389,57 @@ class _CallScreenState extends State<CallScreen> {
   }
 }
 
-// ── SUB-WIDGETS ───────────────────────────────────────────────────────────────
+//  LOCAL PIP 
 
-class _AudioBackground extends StatelessWidget {
-  final String name;
-  const _AudioBackground({required this.name});
+class _LocalPip extends StatelessWidget {
+  final RTCVideoRenderer renderer;
+  const _LocalPip({required this.renderer});
 
   @override
-  Widget build(BuildContext context) => Container(
-    decoration: const BoxDecoration(
-      gradient: LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0xFF0D47A1), Color(0xFF1565C0), Color(0xFF1A1A2E)],
-      ),
-    ),
-    child: Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          CircleAvatar(
-            radius: 64,
-            backgroundColor: Colors.white.withOpacity(0.15),
-            child: Text(
-              name.isNotEmpty ? name[0].toUpperCase() : '?',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 52,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
+  Widget build(BuildContext context) => Material(
+    elevation: 8,
+    borderRadius: BorderRadius.circular(16),
+    clipBehavior: Clip.hardEdge,
+    child: SizedBox(
+      width: 100,
+      height: 140,
+      child: RTCVideoView(
+        renderer,
+        mirror: true,
+        objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
       ),
     ),
   );
 }
 
+//  TOP BAR 
+
 class _TopBar extends StatelessWidget {
   final String name;
   final String statusText;
-  final bool hasGradient;
+  final bool isVideo;
+  final bool isConnected;
   const _TopBar({
     required this.name,
     required this.statusText,
-    required this.hasGradient,
+    required this.isVideo,
+    required this.isConnected,
   });
 
   @override
   Widget build(BuildContext context) => Container(
     padding: EdgeInsets.only(
       top: MediaQuery.of(context).padding.top + 16,
-      bottom: 20,
-      left: 24,
-      right: 24,
+      bottom: 24, left: 24, right: 24,
     ),
-    decoration: hasGradient
-        ? BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Colors.black54, Colors.transparent],
-            ),
-          )
+    decoration: isVideo && isConnected
+        ? const BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Colors.black87, Colors.transparent],
+      ),
+    )
         : null,
     child: Column(
       children: [
@@ -358,19 +447,38 @@ class _TopBar extends StatelessWidget {
           name,
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 24,
+            fontSize: 22,
             fontWeight: FontWeight.w600,
           ),
         ),
         const SizedBox(height: 6),
-        Text(
-          statusText,
-          style: TextStyle(color: Colors.white.withOpacity(0.75), fontSize: 14),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (isConnected)
+              Container(
+                width: 8, height: 8,
+                margin: const EdgeInsets.only(right: 6),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF43A047),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            Text(
+              statusText,
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.75),
+                fontSize: 14,
+              ),
+            ),
+          ],
         ),
       ],
     ),
   );
 }
+
+//  BOTTOM CONTROLS 
 
 class _BottomControls extends StatelessWidget {
   final bool isVideo;
@@ -380,7 +488,7 @@ class _BottomControls extends StatelessWidget {
   final VoidCallback onMute;
   final VoidCallback onCamera;
   final VoidCallback onSpeaker;
-  final VoidCallback onFlip;
+  final AsyncCallback onFlip;
   final VoidCallback onEnd;
 
   const _BottomControls({
@@ -398,65 +506,71 @@ class _BottomControls extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     padding: EdgeInsets.only(
-      bottom: MediaQuery.of(context).padding.bottom + 28,
-      top: 24,
-      left: 24,
-      right: 24,
+      bottom: MediaQuery.of(context).padding.bottom + 32,
+      top: 24, left: 20, right: 20,
     ),
-    decoration: BoxDecoration(
+    decoration: const BoxDecoration(
       gradient: LinearGradient(
         begin: Alignment.bottomCenter,
         end: Alignment.topCenter,
-        colors: [Colors.black87, Colors.transparent],
+        colors: [Colors.black, Colors.transparent],
       ),
     ),
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Control buttons row
+        // Secondary controls row
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            _Btn(
-              icon: muted ? Icons.mic_off : Icons.mic,
+            _CtrlBtn(
+              icon: muted ? Icons.mic_off_rounded : Icons.mic_rounded,
               label: muted ? 'Unmute' : 'Mute',
               active: muted,
               onTap: onMute,
             ),
             if (isVideo)
-              _Btn(
-                icon: cameraOff ? Icons.videocam_off : Icons.videocam,
+              _CtrlBtn(
+                icon: cameraOff ? Icons.videocam_off_rounded : Icons.videocam_rounded,
                 label: cameraOff ? 'Cam On' : 'Cam Off',
                 active: cameraOff,
                 onTap: onCamera,
               ),
-            _Btn(
-              icon: speakerOn ? Icons.volume_up : Icons.hearing,
+            _CtrlBtn(
+              icon: speakerOn ? Icons.volume_up_rounded : Icons.hearing_rounded,
               label: speakerOn ? 'Speaker' : 'Earpiece',
-              active: false,
+              active: speakerOn,
               onTap: onSpeaker,
             ),
             if (isVideo)
-              _Btn(
-                icon: Icons.flip_camera_ios,
+              _CtrlBtn(
+                icon: Icons.flip_camera_ios_rounded,
                 label: 'Flip',
                 active: false,
-                onTap: onFlip,
+                onTap: () => onFlip(),
               ),
           ],
         ),
-        const SizedBox(height: 32),
-        // End call
+
+        const SizedBox(height: 28),
+
+        // End call button — centred, larger
         GestureDetector(
           onTap: onEnd,
           child: Container(
-            width: 68,
-            height: 68,
-            decoration: const BoxDecoration(
-              color: Colors.red,
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              color: const Color(0xFFE53935),
               shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFE53935).withOpacity(0.5),
+                  blurRadius: 20, spreadRadius: 2,
+                ),
+              ],
             ),
-            child: const Icon(Icons.call_end, color: Colors.white, size: 30),
+            child: const Icon(Icons.call_end_rounded, color: Colors.white, size: 32),
           ),
         ),
       ],
@@ -464,16 +578,14 @@ class _BottomControls extends StatelessWidget {
   );
 }
 
-class _Btn extends StatelessWidget {
+class _CtrlBtn extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool active;
   final VoidCallback onTap;
-  const _Btn({
-    required this.icon,
-    required this.label,
-    required this.active,
-    required this.onTap,
+  const _CtrlBtn({
+    required this.icon, required this.label,
+    required this.active, required this.onTap,
   });
 
   @override
@@ -482,22 +594,30 @@ class _Btn extends StatelessWidget {
     child: Column(
       children: [
         Container(
-          width: 54,
-          height: 54,
+          width: 56,
+          height: 56,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: active ? Colors.white : Colors.white.withOpacity(0.18),
+            color: active
+                ? Colors.white
+                : Colors.white.withOpacity(0.15),
+            border: active
+                ? null
+                : Border.all(color: Colors.white.withOpacity(0.2)),
           ),
           child: Icon(
             icon,
-            color: active ? Colors.black87 : Colors.white,
-            size: 24,
+            color: active ? Colors.black : Colors.white,
+            size: 26,
           ),
         ),
         const SizedBox(height: 6),
         Text(
           label,
-          style: const TextStyle(color: Colors.white70, fontSize: 11),
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.7),
+            fontSize: 11,
+          ),
         ),
       ],
     ),

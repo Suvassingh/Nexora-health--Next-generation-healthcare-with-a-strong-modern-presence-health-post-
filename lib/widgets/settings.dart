@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:healthpost_app/app_constants.dart';
 import 'package:healthpost_app/controller/locale_conreoller.dart';
+import 'package:healthpost_app/doctor_patient_list_screen.dart';
 import 'package:healthpost_app/widgets/language_tab.dart';
 import 'package:healthpost_app/widgets/stile.dart';
+
+import '../patient_health_record_screen.dart';
 
 
 class SettingsCard extends StatelessWidget {
@@ -171,23 +174,26 @@ class SettingsCard extends StatelessWidget {
                   size: 20,
                   color: Color(0xFFCBD5E1),
                 ),
-                onTap: () => showAboutDialog(
-                  context: context,
-                  applicationName: 'HealthPost Doctor',
-                  applicationVersion: '1.0.0',
-                  applicationIcon: const Image(
-                    image: AssetImage('assets/images/gov_logo.webp'),
-                    width: 44,
-                    height: 44,
-                  ),
-                  children: const [
-                    Text(
-                      'A digital health management system for '
-                      "Nepal's government health posts.",
-                    ),
-                  ],
-                ),
-              ),
+                onTap: () => Get.to(() => DoctorPatientListScreen())),
+
+                
+                //     showAboutDialog(
+                //   context: context,
+                //   applicationName: 'HealthPost Doctor',
+                //   applicationVersion: '1.0.0',
+                //   applicationIcon: const Image(
+                //     image: AssetImage('assets/images/gov_logo.webp'),
+                //     width: 44,
+                //     height: 44,
+                //   ),
+                //   children: const [
+                //     Text(
+                //       'A digital health management system for '
+                //       "Nepal's government health posts.",
+                //     ),
+                //   ],
+                // ),
+
               _div(),
 
               // Logout

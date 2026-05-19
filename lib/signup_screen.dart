@@ -1,5 +1,3 @@
-
-
 import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -44,8 +42,13 @@ class _SignupScreenState extends State<SignupScreen>
   final licenseNumberController = TextEditingController();
   final qualificationController = TextEditingController();
   final experienceYearsController = TextEditingController();
-  final healthpostNameController = TextEditingController();
-
+  List<Map<String, dynamic>> _allHealthposts = [];
+  List<Map<String, dynamic>> _filteredHealthposts = [];
+  Map<String, dynamic>? _selectedHealthpost;
+  bool _loadingHealthposts = false;
+  bool _healthpostsLoaded = false;
+  String? _healthpostError;
+  final _hpSearchCtrl = TextEditingController();
   final emailcontroller = TextEditingController();
   final passwordcontroller = TextEditingController();
   final confirmPasswordController = TextEditingController();
@@ -58,9 +61,8 @@ class _SignupScreenState extends State<SignupScreen>
   late TabController tabController;
   final supabase = Supabase.instance.client;
 
-  static const List<String> _specialties = [
-    'General Physician',
-  ];
+  static const List<String> _specialties = ['General Physician'];
+ late final displayed = _filteredHealthposts;
 
   String get _addressForDb {
     final parts = [
@@ -72,6 +74,339 @@ class _SignupScreenState extends State<SignupScreen>
     return parts.join(', ');
   }
 
+  Future<void> _fetchHealthposts({bool forceRefresh = false}) async {
+    if (_healthpostsLoaded && !forceRefresh) return;
+
+    setState(() {
+      _loadingHealthposts = true;
+      _healthpostError = null;
+    });
+
+    try {
+      final res = await supabase
+          .from('healthposts')
+          .select('id, name, district, municipality, ward')
+          .eq('is_active', true)
+          .order('name');
+
+      _allHealthposts = (res as List).cast<Map<String, dynamic>>();
+      _filteredHealthposts = List.from(_allHealthposts);
+      _healthpostsLoaded = true;          
+      _healthpostError = null;
+    } catch (e) {
+      _healthpostsLoaded = false;         
+      _healthpostError = 'Could not load healthposts. Tap to retry.';
+      debugPrint('[Healthpost] fetch error: $e');
+    } finally {
+      if (mounted) setState(() => _loadingHealthposts = false);
+    }
+  }
+
+
+  void _filterHealthposts(String query) {
+    final q = query.toLowerCase().trim();
+    setState(() {
+      _filteredHealthposts = q.isEmpty
+          ? List.from(_allHealthposts)
+          : _allHealthposts.where((h) {
+        final name = (h['name'] as String? ?? '').toLowerCase();
+        final district = (h['district'] as String? ?? '').toLowerCase();
+        final muni = (h['municipality'] as String? ?? '').toLowerCase();
+        return name.contains(q) ||
+            district.contains(q) ||
+            muni.contains(q);
+      }).toList();
+    });
+  }
+
+  Future<void> _openHealthpostPicker() async {
+ 
+    await _fetchHealthposts();
+    if (!mounted) return;
+    _hpSearchCtrl.clear();
+    _filteredHealthposts = List.from(_allHealthposts);
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModal) {
+          
+          void filterAndUpdate(String q) {
+            final lower = q.toLowerCase().trim();
+            final filtered = lower.isEmpty
+                ? List<Map<String, dynamic>>.from(_allHealthposts)
+                : _allHealthposts.where((h) {
+              final name = (h['name'] as String? ?? '').toLowerCase();
+              final dist = (h['district'] as String? ?? '').toLowerCase();
+              final muni =
+              (h['municipality'] as String? ?? '').toLowerCase();
+              return name.contains(lower) ||
+                  dist.contains(lower) ||
+                  muni.contains(lower);
+            }).toList();
+            setModal(() => _filteredHealthposts = filtered);
+          }
+
+          return DraggableScrollableSheet(
+            initialChildSize: 0.75,
+            maxChildSize: 0.95,
+            minChildSize: 0.5,
+            expand: false,
+            builder: (_, scrollCtrl) => Column(
+              children: [
+                // Drag handle
+                Container(
+                  margin: const EdgeInsets.symmetric(vertical: 10),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+
+                // Header row
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                  child: Row(
+                    children: [
+                      Icon(Icons.local_hospital,
+                          color: AppConstants.primaryColor, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Select Healthpost',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: AppConstants.primaryColor,
+                        ),
+                      ),
+                      const Spacer(),
+                      // Retry button shown only on error
+                      if (_healthpostError != null)
+                        TextButton.icon(
+                          onPressed: () async {
+                            setModal(() {
+                              _loadingHealthposts = true;
+                              _healthpostError = null;
+                            });
+                            try {
+                              final res = await supabase
+                                  .from('healthposts')
+                                  .select('id, name, district, municipality, ward')
+                                  .eq('is_active', true)
+                                  .order('name');
+                              _allHealthposts = (res as List).cast<Map<String, dynamic>>();
+                              setModal(() {
+                                _filteredHealthposts = List.from(_allHealthposts);
+                                _loadingHealthposts = false;
+                                _healthpostError = null;
+                              });
+                            } catch (e) {
+                              setModal(() {
+                                _loadingHealthposts = false;
+                                _healthpostError = 'Could not load healthposts. Tap to retry.';
+
+                              });
+
+                            }
+
+                          },
+                          icon: const Icon(Icons.refresh, size: 16),
+                          label: const Text('Retry'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppConstants.primaryColor,
+                          ),
+                        ),
+                      // Count badge
+                      if (_healthpostError == null && !_loadingHealthposts)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppConstants.primaryColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '${displayed.length} found',                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppConstants.primaryColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+
+                // Search field
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: TextField(
+                    controller: _hpSearchCtrl,
+                    autofocus: _healthpostsLoaded && _healthpostError == null,
+                    enabled: !_loadingHealthposts && _healthpostError == null,
+                    decoration: InputDecoration(
+                      hintText: 'Search by name or district…',
+                      prefixIcon: const Icon(Icons.search, size: 20),
+                      suffixIcon: ValueListenableBuilder(
+                        valueListenable: _hpSearchCtrl,
+                        builder: (_, v, __) => v.text.isNotEmpty
+                            ? IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () {
+                            _hpSearchCtrl.clear();
+                            filterAndUpdate('');
+                          },
+                        )
+                            : const SizedBox.shrink(),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide:
+                        BorderSide(color: Colors.grey.shade300),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(
+                            color: AppConstants.primaryColor, width: 1.5),
+                      ),
+                    ),
+                    onChanged: filterAndUpdate, 
+                  ),
+                ),
+
+                const Divider(height: 1),
+
+                Expanded(
+                  child: _loadingHealthposts
+                      ? const Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(),
+                        SizedBox(height: 12),
+                        Text('Loading healthposts…',
+                            style: TextStyle(color: Colors.black54)),
+                      ],
+                    ),
+                  )
+                      : _healthpostError != null
+                      ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.cloud_off,
+                            size: 48,
+                            color: Colors.grey.shade400),
+                        const SizedBox(height: 12),
+                        Text(
+                          _healthpostError!,
+                          style: TextStyle(
+                              color: Colors.grey.shade600),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  )
+                      : _filteredHealthposts.isEmpty
+                      ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.search_off,
+                            size: 48,
+                            color: Colors.grey.shade400),
+                        const SizedBox(height: 8),
+                        Text(
+                          'No healthposts found',
+                          style: TextStyle(
+                              color: Colors.grey.shade500),
+                        ),
+                      ],
+                    ),
+                  )
+                      : ListView.separated(
+                    controller: scrollCtrl,
+                    itemCount: _filteredHealthposts.length,
+                    separatorBuilder: (_, __) =>
+                    const Divider(height: 1, indent: 60),
+                    itemBuilder: (_, i) {
+                      final hp = _filteredHealthposts[i];
+                      final isSelected =
+                          _selectedHealthpost?['id'] ==
+                              hp['id'];
+                      final sub = [
+                        hp['municipality'],
+                        hp['district']
+                      ]
+                          .where((e) =>
+                      e != null &&
+                          (e as String).isNotEmpty)
+                          .join(', ');
+
+                      return ListTile(
+                        contentPadding:
+                        const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 4),
+                        leading: CircleAvatar(
+                          backgroundColor: isSelected
+                              ? AppConstants.primaryColor
+                              : AppConstants.primaryColor
+                              .withOpacity(0.08),
+                          child: Icon(
+                            Icons.local_hospital_outlined,
+                            size: 18,
+                            color: isSelected
+                                ? Colors.white
+                                : AppConstants.primaryColor,
+                          ),
+                        ),
+                        title: Text(
+                          hp['name'] ?? '',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: isSelected
+                                ? AppConstants.primaryColor
+                                : Colors.black87,
+                          ),
+                        ),
+                        subtitle: sub.isNotEmpty
+                            ? Text(sub,
+                            style: const TextStyle(
+                                fontSize: 12))
+                            : null,
+                        trailing: isSelected
+                            ? Icon(Icons.check_circle_rounded,
+                            color: AppConstants.primaryColor)
+                            : Icon(Icons.chevron_right,
+                            color: Colors.grey.shade400,
+                            size: 20),
+                        onTap: () {
+                          setState(
+                                  () => _selectedHealthpost = hp);
+                          Navigator.pop(ctx);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
 
   Future<void> signUp() async {
     if (!_validatePersonalFields()) return;
@@ -80,7 +415,6 @@ class _SignupScreenState extends State<SignupScreen>
 
     setState(() => loading = true);
     try {
-      // Step 1 – create auth user
       final result = await supabase.auth.signUp(
         email: emailcontroller.text.trim(),
         password: passwordcontroller.text,
@@ -98,10 +432,8 @@ class _SignupScreenState extends State<SignupScreen>
 
       final userId = result.user!.id;
 
-      // Step 2 – save user_profiles (role = doctor)
       await _saveUserProfile(userId: userId);
 
-      // Step 3 – save doctors table
       await _saveDoctorProfile(userId: userId);
 
       Get.snackbar(
@@ -129,7 +461,6 @@ class _SignupScreenState extends State<SignupScreen>
     }
   }
 
- 
   Future<void> continueWithGoogle() async {
     setState(() => loading = true);
     try {
@@ -168,7 +499,6 @@ class _SignupScreenState extends State<SignupScreen>
           '';
       final googleAvatar = result.user!.userMetadata?['avatar_url'] ?? '';
 
-      // Save user_profiles with google metadata merged with form data
       await supabase.from('user_profiles').upsert({
         'id': userId,
         'full_name': nameController.text.trim().isNotEmpty
@@ -219,7 +549,6 @@ class _SignupScreenState extends State<SignupScreen>
     }
   }
 
-
   Future<void> _saveUserProfile({required String userId}) async {
     await supabase.from('user_profiles').upsert({
       'id': userId,
@@ -237,15 +566,14 @@ class _SignupScreenState extends State<SignupScreen>
     }, onConflict: 'id');
   }
 
-
   Future<void> _saveDoctorProfile({required String userId}) async {
     final data = <String, dynamic>{
       'user_id': userId,
       'specialty': selectedSpecialty ?? '',
       'license_number': licenseNumberController.text.trim(),
       'qualification': qualificationController.text.trim(),
-      'healthpost_name': healthpostNameController.text.trim(),
-
+      'healthpost_id': _selectedHealthpost?['id'],
+      'healthpost_name': _selectedHealthpost?['name'] ?? '',
       'updated_at': DateTime.now().toIso8601String(),
     };
 
@@ -255,7 +583,6 @@ class _SignupScreenState extends State<SignupScreen>
     await supabase.from('doctors').upsert(data, onConflict: 'user_id');
   }
 
- 
   bool _validatePersonalFields() {
     if (nameController.text.trim().isEmpty) {
       _snackError('Name is required');
@@ -297,8 +624,8 @@ class _SignupScreenState extends State<SignupScreen>
       _snackError('Qualification is required (e.g. MBBS, MD)');
       return false;
     }
-    if (healthpostNameController.text.trim().isEmpty) {
-      _snackError('Healthpost / Hospital name is required');
+    if (_selectedHealthpost == null) {
+      _snackError('Please select your assigned healthpost');
       return false;
     }
     return true;
@@ -327,7 +654,6 @@ class _SignupScreenState extends State<SignupScreen>
     colorText: Colors.white,
   );
 
- 
   String _formatPhone(String phone) {
     phone = phone.replaceAll(' ', '').replaceAll('-', '');
     if (phone.startsWith('+977')) return phone;
@@ -361,7 +687,6 @@ class _SignupScreenState extends State<SignupScreen>
     return message;
   }
 
-
   @override
   void initState() {
     super.initState();
@@ -380,10 +705,9 @@ class _SignupScreenState extends State<SignupScreen>
     licenseNumberController.dispose();
     qualificationController.dispose();
     experienceYearsController.dispose();
-    healthpostNameController.dispose();
+    _hpSearchCtrl.dispose();
     super.dispose();
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -489,7 +813,7 @@ class _SignupScreenState extends State<SignupScreen>
     );
   }
 
-  // ── TAB 1 : Personal Info ────────────────────────────────────────────────
+  //  TAB 1 : Personal Info 
   Widget _buildPersonalInfoTab(AppLocalizations loc) {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
@@ -529,7 +853,7 @@ class _SignupScreenState extends State<SignupScreen>
           ),
           const SizedBox(height: 24),
 
-          // ── Address Section ─────────────────────────────────────────────
+          //  Address Section 
           _sectionHeader(
             icon: Icons.location_on_outlined,
             title: 'ठेगाना / Address',
@@ -628,7 +952,7 @@ class _SignupScreenState extends State<SignupScreen>
     );
   }
 
-  // ── TAB 2 : Doctor Info ──────────────────────────────────────────────────
+  //  TAB 2 : Doctor Info 
   Widget _buildDoctorInfoTab(AppLocalizations loc) {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
@@ -699,12 +1023,97 @@ class _SignupScreenState extends State<SignupScreen>
           ),
           const SizedBox(height: 20),
 
-          _label('Assigned Healthpost / Hospital *'),
-          InputField(
-            hintText: 'e.g. Tokha Health Post',
-            obscureText: false,
-            controller: healthpostNameController,
+          _label('Assigned Healthpost *'),
+          const SizedBox(height: 4),
+          GestureDetector(
+            onTap: _loadingHealthposts ? null : _openHealthpostPicker,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: _selectedHealthpost != null
+                    ? AppConstants.primaryColor.withOpacity(0.05)
+                    : Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: _selectedHealthpost != null
+                      ? AppConstants.primaryColor
+                      : AppConstants.primaryColor.withOpacity(0.4),
+                  width: _selectedHealthpost != null ? 1.5 : 1,
+                ),
+              ),
+              child: _loadingHealthposts
+                  ? const Center(
+                      child: SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
+                  : Row(
+                      children: [
+                        Icon(
+                          _selectedHealthpost != null
+                              ? Icons.local_hospital
+                              : Icons.local_hospital_outlined,
+                          size: 20,
+                          color: _selectedHealthpost != null
+                              ? AppConstants.primaryColor
+                              : Colors.black38,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            _selectedHealthpost?['name'] ??
+                                'Tap to select healthpost',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: _selectedHealthpost != null
+                                  ? AppConstants.primaryColor
+                                  : Colors.black38,
+                              fontWeight: _selectedHealthpost != null
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          _selectedHealthpost != null
+                              ? Icons.check_circle_rounded
+                              : Icons.keyboard_arrow_down_rounded,
+                          color: _selectedHealthpost != null
+                              ? AppConstants.primaryColor
+                              : Colors.black38,
+                        ),
+                      ],
+                    ),
+            ),
           ),
+          if (_selectedHealthpost != null) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(
+                  Icons.location_on_outlined,
+                  size: 14,
+                  color: AppConstants.primaryColor.withOpacity(0.7),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  [
+                        _selectedHealthpost!['municipality'],
+                        _selectedHealthpost!['district'],
+                      ]
+                      .where((e) => e != null && (e as String).isNotEmpty)
+                      .join(', '),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppConstants.primaryColor.withOpacity(0.8),
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 28),
 
           Row(
@@ -723,7 +1132,8 @@ class _SignupScreenState extends State<SignupScreen>
                   child: const Text('Back'),
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 12), // add space
+
               Expanded(
                 child: LoginSignupButton(
                   text: loc.next,
@@ -734,13 +1144,12 @@ class _SignupScreenState extends State<SignupScreen>
               ),
             ],
           ),
-          const SizedBox(height: 30),
         ],
       ),
     );
   }
 
-  // ── TAB 3 : Account Info ─────────────────────────────────────────────────
+  //  TAB 3 : Account Info 
   Widget _buildAccountInfoTab(AppLocalizations loc) {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
@@ -799,7 +1208,7 @@ class _SignupScreenState extends State<SignupScreen>
     );
   }
 
-  // ── Shared UI helpers ────────────────────────────────────────────────────
+  //  Shared UI helpers 
   Widget _label(String text) => Padding(
     padding: const EdgeInsets.only(bottom: 6),
     child: Text(
@@ -871,7 +1280,6 @@ class _SignupScreenState extends State<SignupScreen>
     ],
   );
 }
-
 
 class _LocationDropdown extends StatelessWidget {
   final String hint;
@@ -949,7 +1357,6 @@ class _LocationDropdown extends StatelessWidget {
     );
   }
 }
-
 
 class _LocationSummary extends StatelessWidget {
   final String? province, district, municipality;

@@ -6,6 +6,7 @@ import 'package:healthpost_app/controller/internet_status_controller.dart';
 import 'package:healthpost_app/home_screen.dart';
 import 'package:healthpost_app/l10n/app_localizations.dart';
 import 'package:healthpost_app/services/get_service_key.dart';
+import 'package:healthpost_app/signup_screen.dart';
 import 'package:healthpost_app/widgets/connectivity_icon.dart';
 import 'package:healthpost_app/widgets/input_field.dart';
 import 'package:healthpost_app/widgets/language_toggle_button.dart';
@@ -14,7 +15,6 @@ import 'package:lottie/lottie.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class LoginScreen extends StatefulWidget {
-  // ignore: prefer_const_constructors_in_immutables
   LoginScreen({super.key});
 
   @override
@@ -155,11 +155,16 @@ class _LoginScreenState extends State<LoginScreen> {
                 ],
               ),
             ),
-            LoginSignupButton(
-              text: AppLocalizations.of(context)!.login,
-              onPressed: () {
-                login();
-              },
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 60,
+              ),
+              child: LoginSignupButton(
+                text: AppLocalizations.of(context)!.login,
+                onPressed: () {
+                  login();
+                },
+              ),
             ),
             const SizedBox(height: 20),
             Row(
@@ -170,21 +175,25 @@ class _LoginScreenState extends State<LoginScreen> {
                   AppLocalizations.of(context)!.donthaveanaccout,
                   style: const TextStyle(fontSize: 14, color: Colors.black54),
                 ),
-                // TextButton(
-                //   onPressed: () async {
-                //     GetServerKey getServerKey = GetServerKey();
-                //     String accessToken = await getServerKey.getServerKeyToken();
-                //     print(accessToken);
-                //   },
-                //   child: Text(
-                //     AppLocalizations.of(context)!.signup,
-                //     style: const TextStyle(
-                //       fontSize: 14,
-                //       color: AppConstants.secondaryColor,
-                //       fontWeight: FontWeight.bold,
-                //     ),
-                //   ),
-                // ),
+                TextButton(
+                  // onPressed: ()  {
+                  //   // GetServerKey getServerKey = GetServerKey();
+                  //   // String accessToken = await getServerKey.getServerKeyToken();
+                  //   // print(accessToken);
+                  //
+                  // },
+                  onPressed: () => Get.offAll(SignupScreen()),
+
+                  child: Text(
+                    AppLocalizations.of(context)!.signup,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: AppConstants.secondaryColor,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+
               ],
             ),
           ],

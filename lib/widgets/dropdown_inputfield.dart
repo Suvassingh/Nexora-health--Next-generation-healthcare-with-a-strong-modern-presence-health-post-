@@ -82,7 +82,7 @@ class DropdownInputField<T> extends StatelessWidget {
       onChanged: onChanged,
     );
 
-    // ── Simple mode (no label/icon) ──────────────────────────────────────────
+    //  Simple mode (no label/icon) 
     if (icon == null && label == null) {
       return Container(
         decoration: BoxDecoration(
@@ -93,7 +93,7 @@ class DropdownInputField<T> extends StatelessWidget {
       );
     }
 
-    // ── Profile mode (with label/icon) ───────────────────────────────────────
+    //  Profile mode (with label/icon) 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
