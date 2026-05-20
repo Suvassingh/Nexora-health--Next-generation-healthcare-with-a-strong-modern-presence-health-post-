@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:healthpost_app/app_constants.dart';
+import 'package:healthpost_app/l10n/app_localizations.dart';
 import 'package:healthpost_app/models/doctor_model.dart';
 
 
@@ -8,7 +9,10 @@ class StatsStrip extends StatelessWidget {
   const StatsStrip({required this.doctor});
 
   @override
-  Widget build(BuildContext context) => Padding(
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+
+    return Padding(
     padding: const EdgeInsets.symmetric(horizontal: 16),
     child: Container(
       decoration: BoxDecoration(
@@ -27,17 +31,17 @@ class StatsStrip extends StatelessWidget {
           children: [
             _StatTile(
               value: doctor.experienceYears != null
-                  ? '${doctor.experienceYears} yrs'
-                  : '—',
-              label: 'Experience',
+                  ? '${doctor.experienceYears} ${l.years}'
+                    : l.notAvailable,
+label: l.experience,
               icon: Icons.timer_outlined,
               color: AppConstants.primaryColor,
               bg: const Color(0xFFEBF5FD),
             ),
             _vLine(),
             _StatTile(
-              value: doctor.isActive ? 'Active' : 'Inactive',
-              label: 'Status',
+value: doctor.isActive ? l.active : l.inactive,
+label: l.status,
               icon: doctor.isActive
                   ? Icons.check_circle_outline_rounded
                   : Icons.cancel_outlined,
@@ -49,9 +53,10 @@ class StatsStrip extends StatelessWidget {
             _vLine(),
             _StatTile(
               value: doctor.preferredLanguage == 'nepali'
-                  ? 'नेपाली'
-                  : 'English',
-              label: 'Language',
+                    ? l.langNepali
+                    : l.langEnglish,
+
+label: l.language,
               icon: Icons.language_rounded,
               color: const Color(0xFF8E44AD),
               bg: const Color(0xFFF5EEF8),
@@ -61,6 +66,7 @@ class StatsStrip extends StatelessWidget {
       ),
     ),
   );
+  }
 
   Widget _vLine() => Container(
     width: 1,
@@ -82,7 +88,10 @@ class _StatTile extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => Expanded(
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+
+    return Expanded(
     child: Padding(
       padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 6),
       child: Column(
@@ -114,4 +123,5 @@ class _StatTile extends StatelessWidget {
       ),
     ),
   );
+}
 }

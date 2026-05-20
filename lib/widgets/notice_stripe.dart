@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:healthpost_app/l10n/app_localizations.dart';
 class NoticeStrip extends StatelessWidget {
   final List<String> notices;
   const NoticeStrip({super.key, required this.notices});
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Container(
@@ -21,8 +24,10 @@ class NoticeStrip extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: notices.isEmpty
-                  ? const Text('No notices today',
-                  style: TextStyle(fontSize: 12, color: Colors.grey))
+                  ? Text(
+                      l.noNoticesToday,
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    )
                   : Text(notices.first,
                 style: const TextStyle(fontSize: 12, color: Color(0xFFA06000)),
                 overflow: TextOverflow.ellipsis,

@@ -1,5 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:healthpost_app/l10n/app_localizations.dart';
 
 import '../app_constants.dart';
 class WeeklyChart extends StatelessWidget {
@@ -9,6 +10,8 @@ class WeeklyChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+
     const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -21,8 +24,10 @@ class WeeklyChart extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('This week',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            Text(
+              l.thisWeek,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            ),
             const SizedBox(height: 16),
             SizedBox(
               height: 100,

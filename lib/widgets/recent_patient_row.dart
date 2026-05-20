@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:healthpost_app/l10n/app_localizations.dart';
 
 import '../app_constants.dart';
 import '../home_page.dart';
@@ -8,6 +9,8 @@ class RecentPatientsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+
     return SizedBox(
       height: 90,
       child: ListView.separated(
@@ -22,7 +25,9 @@ class RecentPatientsRow extends StatelessWidget {
               CircleAvatar(
                 radius: 28,
                 backgroundColor: AppConstants.primaryColor.withOpacity(0.12),
-                child: Text(a.patientInitials ?? '?',
+                child: Text(
+                  a.patientInitials ?? l.unknownInitial,
+
                     style: TextStyle(
                       color: AppConstants.primaryColor,
                       fontWeight: FontWeight.bold,

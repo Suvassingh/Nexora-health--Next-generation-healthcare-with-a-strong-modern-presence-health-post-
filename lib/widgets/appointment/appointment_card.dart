@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:healthpost_app/l10n/app_localizations.dart';
 import 'package:healthpost_app/models/doctor_appointment.dart';
 import 'package:healthpost_app/app_constants.dart';
 
@@ -26,6 +27,8 @@ class ApptCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -138,7 +141,7 @@ class ApptCard extends StatelessWidget {
                               borderRadius: BorderRadius.circular(20),
                             ),
                           ),
-                          child: const Text('Confirm'),
+child: Text(l.confirm),
                         ),
                       if (onDecline != null)
                         OutlinedButton(
@@ -151,7 +154,7 @@ class ApptCard extends StatelessWidget {
                               borderRadius: BorderRadius.circular(20),
                             ),
                           ),
-                          child: const Text('Decline'),
+child: Text(l.decline),
                         ),
                       if (onComplete != null)
                         ElevatedButton(
@@ -164,7 +167,9 @@ class ApptCard extends StatelessWidget {
                               borderRadius: BorderRadius.circular(20),
                             ),
                           ),
-                          child: const Text('Complete'),
+                          child: Text(l.complete),
+
+                          
                         ),
                       if (onNoShow != null)
                         OutlinedButton(
@@ -177,7 +182,8 @@ class ApptCard extends StatelessWidget {
                               borderRadius: BorderRadius.circular(20),
                             ),
                           ),
-                          child: const Text('No Show'),
+                          child: Text(l.noShow),
+
                         ),
                     ],
                   ),

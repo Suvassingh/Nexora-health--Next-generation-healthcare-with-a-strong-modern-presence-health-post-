@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:healthpost_app/app_constants.dart';
+import 'package:healthpost_app/l10n/app_localizations.dart';
 import 'package:healthpost_app/models/doctor_model.dart';
 import 'package:healthpost_app/widgets/verified_batch.dart';
 import 'package:healthpost_app/widgets/contact_btn.dart';
@@ -12,6 +13,8 @@ class HeroBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -79,16 +82,18 @@ class HeroBanner extends StatelessWidget {
                     InfoChip(
                       icon: Icons.medical_services_outlined,
                       label: doctor.specialty.isEmpty
-                          ? 'Doctor'
+                          ? l.doctor
                           : doctor.specialty,
+
                       bg: const Color(0xFFEBF5FD),
                       fg: AppConstants.primaryColor,
                     ),
                     InfoChip(
                       icon: Icons.location_on_outlined,
-                      label: doctor.healthpostName.isEmpty
-                          ? 'Health Post'
+                    label: doctor.healthpostName.isEmpty
+                          ? l.healthPost
                           : doctor.healthpostName,
+
                       bg: const Color(0xFFEAF7EF),
                       fg: const Color(0xFF1A7A4A),
                     ),
@@ -116,7 +121,8 @@ class HeroBanner extends StatelessWidget {
                         ),
                         const SizedBox(width: 5),
                         Text(
-                          'NMC # ${doctor.licenseNumber}',
+                          '${l.nmcPrefix} ${doctor.licenseNumber}',
+
                           style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
@@ -133,7 +139,7 @@ class HeroBanner extends StatelessWidget {
                   children: [
                     ContactBtn(
                       icon: Icons.phone_outlined,
-                      label: doctor.phone.isEmpty ? '—' : doctor.phone,
+label: doctor.phone.isEmpty ? l.notAvailable : doctor.phone,
                       color: AppConstants.primaryColor,
                     ),
                     Container(
@@ -143,7 +149,7 @@ class HeroBanner extends StatelessWidget {
                     ),
                     ContactBtn(
                       icon: Icons.email_outlined,
-                      label: doctor.email.isEmpty ? '—' : doctor.email,
+label: doctor.email.isEmpty ? l.notAvailable : doctor.email,
                       color: const Color(0xFF8E44AD),
                     ),
                   ],

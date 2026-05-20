@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:healthpost_app/app_constants.dart';
 import 'package:healthpost_app/controller/locale_conreoller.dart';
 import 'package:healthpost_app/doctor_patient_list_screen.dart';
+import 'package:healthpost_app/l10n/app_localizations.dart';
 import 'package:healthpost_app/widgets/language_tab.dart';
 import 'package:healthpost_app/widgets/stile.dart';
 
@@ -21,7 +22,10 @@ class SettingsCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => Padding(
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+
+    return Padding(
     padding: const EdgeInsets.symmetric(horizontal: 16),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -44,14 +48,14 @@ class SettingsCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              const Text(
-                'Settings',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF1A1A2E),
+             Text(
+                  l.settings,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF1A1A2E),
+                  ),
                 ),
-              ),
             ],
           ),
         ),
@@ -88,25 +92,25 @@ class SettingsCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 14),
-                    const Expanded(
+                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Language',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF1A1A2E),
+                              l.language,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF1A1A2E),
+                              ),
                             ),
-                          ),
                           Text(
-                            'App display language',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Color(0xFF94A3B8),
+                              l.appDisplayLanguage,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Color(0xFF94A3B8),
+                              ),
                             ),
-                          ),
                         ],
                       ),
                     ),
@@ -145,15 +149,16 @@ class SettingsCard extends StatelessWidget {
                 icon: Icons.lock_outline_rounded,
                 iconBg: const Color(0xFFEBF5FD),
                 iconColor: AppConstants.primaryColor,
-                label: 'Change Password',
+label: l.changePassword,
                 trailing: const Icon(
                   Icons.chevron_right_rounded,
                   size: 20,
                   color: Color(0xFFCBD5E1),
                 ),
                 onTap: () => Get.snackbar(
-                  'Coming Soon',
-                  'Password change will be available soon.',
+                 l.comingSoon,
+                    l.passwordChangeSoon,
+
                   backgroundColor: Colors.white,
                   colorText: const Color(0xFF1A1A2E),
                   borderRadius: 14,
@@ -167,8 +172,8 @@ class SettingsCard extends StatelessWidget {
                 icon: Icons.info_outline_rounded,
                 iconBg: const Color(0xFFEAF7EF),
                 iconColor: const Color(0xFF27AE60),
-                label: 'About App',
-                sub: 'Version 1.0.0',
+              label: l.aboutApp,
+                  sub: l.appVersion,
                 trailing: const Icon(
                   Icons.chevron_right_rounded,
                   size: 20,
@@ -201,7 +206,7 @@ class SettingsCard extends StatelessWidget {
                 icon: Icons.logout_rounded,
                 iconBg: const Color(0xFFFEF2F2),
                 iconColor: const Color(0xFFEF4444),
-                label: 'Logout',
+label: l.logout,
                 labelColor: const Color(0xFFEF4444),
                 onTap: onLogout,
               ),
@@ -211,6 +216,7 @@ class SettingsCard extends StatelessWidget {
       ],
     ),
   );
+  }
 
   Widget _div() => Container(
     height: 1,

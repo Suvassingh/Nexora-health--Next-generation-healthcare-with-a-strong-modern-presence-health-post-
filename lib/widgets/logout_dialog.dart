@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:healthpost_app/l10n/app_localizations.dart';
 
 
 class LogoutDialog extends StatelessWidget {
   const LogoutDialog();
   @override
-  Widget build(BuildContext context) => Dialog(
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+
+    return Dialog(
+    
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
     child: Padding(
       padding: const EdgeInsets.all(28),
@@ -25,24 +30,24 @@ class LogoutDialog extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          const Text(
-            'Logout',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF1A1A2E),
+          Text(
+              l.logout,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF1A1A2E),
+              ),
             ),
-          ),
           const SizedBox(height: 8),
-          const Text(
-            'Are you sure you want to logout\nof your doctor account?',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 13,
-              color: Color(0xFF64748B),
-              height: 1.6,
+          Text(
+              l.logoutConfirmMessage,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13,
+                color: Color(0xFF64748B),
+                height: 1.6,
+              ),
             ),
-          ),
           const SizedBox(height: 24),
           Row(
             children: [
@@ -56,13 +61,13 @@ class LogoutDialog extends StatelessWidget {
                     ),
                     padding: const EdgeInsets.symmetric(vertical: 13),
                   ),
-                  child: const Text(
-                    'Cancel',
-                    style: TextStyle(
-                      color: Color(0xFF64748B),
-                      fontWeight: FontWeight.w600,
+                  child: Text(
+                      l.cancel,
+                      style: const TextStyle(
+                        color: Color(0xFF64748B),
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -78,10 +83,10 @@ class LogoutDialog extends StatelessWidget {
                     ),
                     padding: const EdgeInsets.symmetric(vertical: 13),
                   ),
-                  child: const Text(
-                    'Logout',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
+                  child: Text(
+                      l.logout,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
                 ),
               ),
             ],
@@ -90,4 +95,5 @@ class LogoutDialog extends StatelessWidget {
       ),
     ),
   );
+  }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:healthpost_app/app_constants.dart';
 import 'package:healthpost_app/home_page.dart';
+import 'package:healthpost_app/l10n/app_localizations.dart';
 
 class AppointmentsList extends StatelessWidget {
   final List<AppointmentItem> appointments;
@@ -28,38 +29,38 @@ class _AppointmentCard extends StatelessWidget {
   final AppointmentItem appointment;
   const _AppointmentCard({required this.appointment});
 
-  Color get _statusColor {
-    switch (appointment.status) {
-      case 'confirmed':
-        return const Color(0xFF1B5E8A);
-      case 'completed':
-        return const Color(0xFF27AE60);
-      default:
-        return const Color(0xFFF39C12);
-    }
-  }
+  // Color get _statusColor {
+  //   switch (appointment.status) {
+  //     case 'confirmed':
+  //       return const Color(0xFF1B5E8A);
+  //     case 'completed':
+  //       return const Color(0xFF27AE60);
+  //     default:
+  //       return const Color(0xFFF39C12);
+  //   }
+  // }
 
-  Color get _statusBg {
-    switch (appointment.status) {
-      case 'confirmed':
-        return const Color(0xFFE8F4FD);
-      case 'completed':
-        return const Color(0xFFEAF7EF);
-      default:
-        return const Color(0xFFFFF8E8);
-    }
-  }
+  // Color get _statusBg {
+  //   switch (appointment.status) {
+  //     case 'confirmed':
+  //       return const Color(0xFFE8F4FD);
+  //     case 'completed':
+  //       return const Color(0xFFEAF7EF);
+  //     default:
+  //       return const Color(0xFFFFF8E8);
+  //   }
+  // }
 
-  String get _statusLabel {
-    switch (appointment.status) {
-      case 'confirmed':
-        return 'Confirmed';
-      case 'completed':
-        return 'Completed';
-      default:
-        return 'Pending';
-    }
-  }
+  // String get _statusLabel {
+  //   switch (appointment.status) {
+  //     case 'confirmed':
+  //       return 'Confirmed';
+  //     case 'completed':
+  //       return 'Completed';
+  //     default:
+  //       return 'Pending';
+  //   }
+  // }
 
   static const List<Color> _avatarColors = [
     Color(0xFF3498DB),
@@ -74,7 +75,23 @@ class _AppointmentCard extends StatelessWidget {
     final colorIndex =
         (appointment.patientName.codeUnitAt(0)) % _avatarColors.length;
     final avatarColor = _avatarColors[colorIndex];
+final l = AppLocalizations.of(context)!;
 
+final statusColor = switch (appointment.status) {
+      'confirmed' => const Color(0xFF1B5E8A),
+      'completed' => const Color(0xFF27AE60),
+      _ => const Color(0xFFF39C12),
+    };
+    final statusBg = switch (appointment.status) {
+      'confirmed' => const Color(0xFFE8F4FD),
+      'completed' => const Color(0xFFEAF7EF),
+      _ => const Color(0xFFFFF8E8),
+    };
+    final statusLabel = switch (appointment.status) {
+      'confirmed' => l.statusConfirmed,
+      'completed' => l.statusCompleted,
+      _ => l.statusPending,
+    };
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -100,7 +117,8 @@ class _AppointmentCard extends StatelessWidget {
             ),
             child: Center(
               child: Text(
-                appointment.patientInitials ?? '?',
+               appointment.patientInitials ?? l.unknownInitial,
+
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -167,15 +185,15 @@ class _AppointmentCard extends StatelessWidget {
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: _statusBg,
+                  color: statusColor,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  _statusLabel,
+                  statusLabel,
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: _statusColor,
+                    color: statusColor,
                   ),
                 ),
               ),
@@ -194,8 +212,7 @@ class _AppointmentCard extends StatelessWidget {
                     ),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Text(
-                    'View',
+                  child: Text(l.view,
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,

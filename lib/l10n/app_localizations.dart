@@ -1304,7 +1304,7 @@ abstract class AppLocalizations {
   /// No description provided for @incompleteProfile.
   ///
   /// In en, this message translates to:
-  /// **'Please complete all required fields.'**
+  /// **'Incomplete profile'**
   String get incompleteProfile;
 
   /// No description provided for @nameRequired.
@@ -1316,7 +1316,7 @@ abstract class AppLocalizations {
   /// No description provided for @phoneRequired.
   ///
   /// In en, this message translates to:
-  /// **'Phone number is required'**
+  /// **'Phone is required'**
   String get phoneRequired;
 
   /// No description provided for @ageRequired.
@@ -1342,6 +1342,324 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Passwords do not match'**
   String get passwordMismatch;
+
+  /// No description provided for @confirmAppointment.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm appointment?'**
+  String get confirmAppointment;
+
+  /// No description provided for @declineAppointment.
+  ///
+  /// In en, this message translates to:
+  /// **'Decline appointment?'**
+  String get declineAppointment;
+
+  /// No description provided for @patientNoShow.
+  ///
+  /// In en, this message translates to:
+  /// **'Patient did not show'**
+  String get patientNoShow;
+
+  /// No description provided for @date.
+  ///
+  /// In en, this message translates to:
+  /// **'Date'**
+  String get date;
+
+  /// No description provided for @time.
+  ///
+  /// In en, this message translates to:
+  /// **'Time'**
+  String get time;
+
+  /// No description provided for @type.
+  ///
+  /// In en, this message translates to:
+  /// **'Type'**
+  String get type;
+
+  /// No description provided for @reason.
+  ///
+  /// In en, this message translates to:
+  /// **'Reason'**
+  String get reason;
+
+  /// No description provided for @noMessagesYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No messages yet'**
+  String get noMessagesYet;
+
+  /// No description provided for @justNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Just now'**
+  String get justNow;
+
+  /// No description provided for @minutesAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} min ago'**
+  String minutesAgo(Object count);
+
+  /// No description provided for @daysAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} days ago'**
+  String daysAgo(Object count);
+
+  /// No description provided for @sessionExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Session expired'**
+  String get sessionExpired;
+
+  /// No description provided for @profileSetupIncomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile setup incomplete'**
+  String get profileSetupIncomplete;
+
+  /// No description provided for @doctorDetailsMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Doctor details missing'**
+  String get doctorDetailsMissing;
+
+  /// No description provided for @couldNotLoadProfile.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load profile'**
+  String get couldNotLoadProfile;
+
+  /// No description provided for @profileNotSavedDuringSignup.
+  ///
+  /// In en, this message translates to:
+  /// **'Your profile was not saved during signup.'**
+  String get profileNotSavedDuringSignup;
+
+  /// No description provided for @doctorRegistrationIncomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Doctor registration is incomplete.'**
+  String get doctorRegistrationIncomplete;
+
+  /// No description provided for @sessionExpiredMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Your session has expired. Please login again.'**
+  String get sessionExpiredMessage;
+
+  /// No description provided for @goToLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to Login'**
+  String get goToLogin;
+
+  /// No description provided for @signOutAndReregister.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign out & re-register'**
+  String get signOutAndReregister;
+
+  /// No description provided for @nmcPrefix.
+  ///
+  /// In en, this message translates to:
+  /// **'NMC #'**
+  String get nmcPrefix;
+
+  /// No description provided for @notAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'—'**
+  String get notAvailable;
+
+  /// No description provided for @generalSpecialty.
+  ///
+  /// In en, this message translates to:
+  /// **'General'**
+  String get generalSpecialty;
+
+  /// No description provided for @statusConfirmed.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirmed'**
+  String get statusConfirmed;
+
+  /// No description provided for @statusCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Completed'**
+  String get statusCompleted;
+
+  /// No description provided for @statusPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get statusPending;
+
+  /// No description provided for @unknownInitial.
+  ///
+  /// In en, this message translates to:
+  /// **'?'**
+  String get unknownInitial;
+
+  /// No description provided for @view.
+  ///
+  /// In en, this message translates to:
+  /// **'View'**
+  String get view;
+
+  /// No description provided for @todaysPatients.
+  ///
+  /// In en, this message translates to:
+  /// **'Today\'s patients'**
+  String get todaysPatients;
+
+  /// No description provided for @statPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get statPending;
+
+  /// No description provided for @statCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Completed'**
+  String get statCompleted;
+
+  /// No description provided for @thisMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'This month'**
+  String get thisMonth;
+
+  /// No description provided for @noNoticesToday.
+  ///
+  /// In en, this message translates to:
+  /// **'No notices today'**
+  String get noNoticesToday;
+
+  /// No description provided for @logout.
+  ///
+  /// In en, this message translates to:
+  /// **'Logout'**
+  String get logout;
+
+  /// No description provided for @logoutConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to logout\nof your doctor account?'**
+  String get logoutConfirmMessage;
+
+  /// No description provided for @stop.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop'**
+  String get stop;
+
+  /// No description provided for @readAloud.
+  ///
+  /// In en, this message translates to:
+  /// **'Read aloud'**
+  String get readAloud;
+
+  /// No description provided for @thisWeek.
+  ///
+  /// In en, this message translates to:
+  /// **'This week'**
+  String get thisWeek;
+
+  /// No description provided for @nmcVerified.
+  ///
+  /// In en, this message translates to:
+  /// **'NMC Verified'**
+  String get nmcVerified;
+
+  /// No description provided for @years.
+  ///
+  /// In en, this message translates to:
+  /// **'yrs'**
+  String get years;
+
+  /// No description provided for @active.
+  ///
+  /// In en, this message translates to:
+  /// **'Active'**
+  String get active;
+
+  /// No description provided for @inactive.
+  ///
+  /// In en, this message translates to:
+  /// **'Inactive'**
+  String get inactive;
+
+  /// No description provided for @status.
+  ///
+  /// In en, this message translates to:
+  /// **'Status'**
+  String get status;
+
+  /// No description provided for @language.
+  ///
+  /// In en, this message translates to:
+  /// **'Language'**
+  String get language;
+
+  /// No description provided for @langNepali.
+  ///
+  /// In en, this message translates to:
+  /// **'नेपाली'**
+  String get langNepali;
+
+  /// No description provided for @langEnglish.
+  ///
+  /// In en, this message translates to:
+  /// **'English'**
+  String get langEnglish;
+
+  /// No description provided for @settings.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings'**
+  String get settings;
+
+  /// No description provided for @appDisplayLanguage.
+  ///
+  /// In en, this message translates to:
+  /// **'App display language'**
+  String get appDisplayLanguage;
+
+  /// No description provided for @changePassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Change Password'**
+  String get changePassword;
+
+  /// No description provided for @comingSoon.
+  ///
+  /// In en, this message translates to:
+  /// **'Coming Soon'**
+  String get comingSoon;
+
+  /// No description provided for @passwordChangeSoon.
+  ///
+  /// In en, this message translates to:
+  /// **'Password change will be available soon.'**
+  String get passwordChangeSoon;
+
+  /// No description provided for @aboutApp.
+  ///
+  /// In en, this message translates to:
+  /// **'About App'**
+  String get aboutApp;
+
+  /// No description provided for @appVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'Version 1.0.0'**
+  String get appVersion;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

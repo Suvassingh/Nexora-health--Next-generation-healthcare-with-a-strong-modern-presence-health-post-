@@ -1,5 +1,6 @@
 
 import 'package:flutter/material.dart';
+import 'package:healthpost_app/l10n/app_localizations.dart';
 import 'package:healthpost_app/models/doctor_chat_preview.dart';
 
 class DoctorChatTile extends StatelessWidget {
@@ -16,6 +17,7 @@ class DoctorChatTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appt = preview.appt;
+final l = AppLocalizations.of(context)!;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -61,7 +63,7 @@ class DoctorChatTile extends StatelessWidget {
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 3),
           child: Text(
-            preview.lastMessage ?? 'No messages yet',
+preview.lastMessage ?? l.noMessagesYet,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
@@ -74,7 +76,7 @@ class DoctorChatTile extends StatelessWidget {
         ),
         trailing: preview.lastMessageAt != null
             ? Text(
-                _formatTime(preview.lastMessageAt!),
+                _formatTime(preview.lastMessageAt!, l),
                 style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
               )
             : null,
@@ -82,15 +84,15 @@ class DoctorChatTile extends StatelessWidget {
     );
   }
 
-  String _formatTime(DateTime dt) {
+  String _formatTime(DateTime dt, AppLocalizations l) {
     final now = DateTime.now();
     final diff = now.difference(dt);
-    if (diff.inMinutes < 1) return 'Just now';
-    if (diff.inHours < 1) return '${diff.inMinutes}m ago';
+    if (diff.inMinutes < 1) return l.justNow;
+    if (diff.inHours < 1) return l.minutesAgo(diff.inMinutes);
     if (diff.inDays < 1) {
       return '${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
     }
-    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    if (diff.inDays < 7) return l.daysAgo(diff.inDays);
     return '${dt.day}/${dt.month}';
   }
 }

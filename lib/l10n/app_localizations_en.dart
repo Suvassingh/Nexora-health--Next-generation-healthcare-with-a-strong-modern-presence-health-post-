@@ -622,13 +622,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get signUpFailed => 'Sign up failed';
 
   @override
-  String get incompleteProfile => 'Please complete all required fields.';
+  String get incompleteProfile => 'Incomplete profile';
 
   @override
   String get nameRequired => 'Name is required';
 
   @override
-  String get phoneRequired => 'Phone number is required';
+  String get phoneRequired => 'Phone is required';
 
   @override
   String get ageRequired => 'Age is required';
@@ -641,4 +641,167 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get passwordMismatch => 'Passwords do not match';
+
+  @override
+  String get confirmAppointment => 'Confirm appointment?';
+
+  @override
+  String get declineAppointment => 'Decline appointment?';
+
+  @override
+  String get patientNoShow => 'Patient did not show';
+
+  @override
+  String get date => 'Date';
+
+  @override
+  String get time => 'Time';
+
+  @override
+  String get type => 'Type';
+
+  @override
+  String get reason => 'Reason';
+
+  @override
+  String get noMessagesYet => 'No messages yet';
+
+  @override
+  String get justNow => 'Just now';
+
+  @override
+  String minutesAgo(Object count) {
+    return '$count min ago';
+  }
+
+  @override
+  String daysAgo(Object count) {
+    return '$count days ago';
+  }
+
+  @override
+  String get sessionExpired => 'Session expired';
+
+  @override
+  String get profileSetupIncomplete => 'Profile setup incomplete';
+
+  @override
+  String get doctorDetailsMissing => 'Doctor details missing';
+
+  @override
+  String get couldNotLoadProfile => 'Could not load profile';
+
+  @override
+  String get profileNotSavedDuringSignup => 'Your profile was not saved during signup.';
+
+  @override
+  String get doctorRegistrationIncomplete => 'Doctor registration is incomplete.';
+
+  @override
+  String get sessionExpiredMessage => 'Your session has expired. Please login again.';
+
+  @override
+  String get goToLogin => 'Go to Login';
+
+  @override
+  String get signOutAndReregister => 'Sign out & re-register';
+
+  @override
+  String get nmcPrefix => 'NMC #';
+
+  @override
+  String get notAvailable => '—';
+
+  @override
+  String get generalSpecialty => 'General';
+
+  @override
+  String get statusConfirmed => 'Confirmed';
+
+  @override
+  String get statusCompleted => 'Completed';
+
+  @override
+  String get statusPending => 'Pending';
+
+  @override
+  String get unknownInitial => '?';
+
+  @override
+  String get view => 'View';
+
+  @override
+  String get todaysPatients => 'Today\'s patients';
+
+  @override
+  String get statPending => 'Pending';
+
+  @override
+  String get statCompleted => 'Completed';
+
+  @override
+  String get thisMonth => 'This month';
+
+  @override
+  String get noNoticesToday => 'No notices today';
+
+  @override
+  String get logout => 'Logout';
+
+  @override
+  String get logoutConfirmMessage => 'Are you sure you want to logout\nof your doctor account?';
+
+  @override
+  String get stop => 'Stop';
+
+  @override
+  String get readAloud => 'Read aloud';
+
+  @override
+  String get thisWeek => 'This week';
+
+  @override
+  String get nmcVerified => 'NMC Verified';
+
+  @override
+  String get years => 'yrs';
+
+  @override
+  String get active => 'Active';
+
+  @override
+  String get inactive => 'Inactive';
+
+  @override
+  String get status => 'Status';
+
+  @override
+  String get language => 'Language';
+
+  @override
+  String get langNepali => 'नेपाली';
+
+  @override
+  String get langEnglish => 'English';
+
+  @override
+  String get settings => 'Settings';
+
+  @override
+  String get appDisplayLanguage => 'App display language';
+
+  @override
+  String get changePassword => 'Change Password';
+
+  @override
+  String get comingSoon => 'Coming Soon';
+
+  @override
+  String get passwordChangeSoon => 'Password change will be available soon.';
+
+  @override
+  String get aboutApp => 'About App';
+
+  @override
+  String get appVersion => 'Version 1.0.0';
 }

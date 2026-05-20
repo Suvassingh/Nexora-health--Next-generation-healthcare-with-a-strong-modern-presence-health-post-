@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:healthpost_app/app_constants.dart';
+import 'package:healthpost_app/l10n/app_localizations.dart';
 
 class ErrorState extends StatelessWidget {
   final String error;
@@ -15,6 +16,7 @@ class ErrorState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     final isMissingDoctor = error.contains('no_doctor_profile');
     final isMissingBoth = error.contains('no_profile');
     final isNotAuth = error.contains('Not authenticated');
@@ -44,13 +46,13 @@ class ErrorState extends StatelessWidget {
             ),
             const SizedBox(height: 18),
             Text(
-              isNotAuth
-                  ? 'Session expired'
+             isNotAuth
+                  ? l.sessionExpired
                   : isMissingBoth
-                  ? 'Profile setup incomplete'
+                  ? l.profileSetupIncomplete
                   : isMissingDoctor
-                  ? 'Doctor details missing'
-                  : 'Could not load profile',
+                  ? l.doctorDetailsMissing
+                  : l.couldNotLoadProfile,
               style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
@@ -60,11 +62,11 @@ class ErrorState extends StatelessWidget {
             const SizedBox(height: 10),
             Text(
               isMissingBoth
-                  ? 'Profile data was not saved during signup.\nSign out and register again.'
+                  ? l.profileNotSavedDuringSignup
                   : isMissingDoctor
-                  ? 'Doctor registration incomplete.\nContact your administrator.'
+                  ? l.doctorRegistrationIncomplete
                   : isNotAuth
-                  ? 'Your session has expired. Please login again.'
+                  ? l.sessionExpiredMessage
                   : error,
               textAlign: TextAlign.center,
               style: const TextStyle(
@@ -81,7 +83,7 @@ class ErrorState extends StatelessWidget {
                 icon: Icon(
                   isNotAuth ? Icons.login_rounded : Icons.refresh_rounded,
                 ),
-                label: Text(isNotAuth ? 'Go to Login' : 'Retry'),
+label: Text(isNotAuth ? l.goToLogin : l.retry),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppConstants.primaryColor,
                   foregroundColor: Colors.white,
@@ -98,7 +100,7 @@ class ErrorState extends StatelessWidget {
               TextButton.icon(
                 onPressed: onSignOut,
                 icon: const Icon(Icons.logout_rounded, size: 15),
-                label: const Text('Sign out & re-register'),
+label: Text(l.signOutAndReregister),
                 style: TextButton.styleFrom(
                   foregroundColor: const Color(0xFFEF4444),
                 ),

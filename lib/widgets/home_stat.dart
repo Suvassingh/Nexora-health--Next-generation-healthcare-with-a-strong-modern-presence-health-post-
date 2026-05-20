@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:healthpost_app/app_constants.dart';
 import 'package:healthpost_app/home_page.dart';
+import 'package:healthpost_app/l10n/app_localizations.dart';
 
 class StatsGrid extends StatelessWidget {
   final HomeStats stats;
@@ -8,6 +9,8 @@ class StatsGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
@@ -15,7 +18,7 @@ class StatsGrid extends StatelessWidget {
           Row(
             children: [
               _StatCard(
-                label: "Today's patients",
+label: l.todaysPatients,
                 value: stats.todayPatients.toString(),
                 icon: Icons.groups_outlined,
                 color: AppConstants.primaryColor,
@@ -23,7 +26,7 @@ class StatsGrid extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               _StatCard(
-                label: 'Pending',
+label: l.statPending,
                 value: stats.pending.toString(),
                 icon: Icons.hourglass_empty_rounded,
                 color: const Color(0xFFF39C12),
@@ -35,7 +38,7 @@ class StatsGrid extends StatelessWidget {
           Row(
             children: [
               _StatCard(
-                label: 'Completed',
+label: l.statCompleted,
                 value: stats.completed.toString(),
                 icon: Icons.check_circle_outline_rounded,
                 color: const Color(0xFF27AE60),
@@ -43,7 +46,7 @@ class StatsGrid extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               _StatCard(
-                label: 'This month',
+label: l.thisMonth,
                 value: stats.totalThisMonth.toString(),
                 icon: Icons.bar_chart_rounded,
                 color: const Color(0xFF8E44AD),

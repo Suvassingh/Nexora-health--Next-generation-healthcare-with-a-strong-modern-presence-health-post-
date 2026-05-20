@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:healthpost_app/app_constants.dart';
+import 'package:healthpost_app/l10n/app_localizations.dart';
 class HeroHeader extends StatelessWidget {
   final String doctorName;
   final String specialty;
@@ -21,6 +22,8 @@ class HeroHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+
     return Container(
       width: double.infinity,
       decoration: const BoxDecoration(
@@ -102,7 +105,8 @@ class HeroHeader extends StatelessWidget {
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    healthpostName.isEmpty ? 'Health Post' : healthpostName,
+                    healthpostName.isEmpty ? l.healthPost : healthpostName,
+
                     style: const TextStyle(
                       fontSize: 12,
                       color: Colors.white,
@@ -124,7 +128,8 @@ class HeroHeader extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  specialty.isEmpty ? 'General' : specialty,
+                  specialty.isEmpty ? l.generalSpecialty : specialty,
+
                   style: const TextStyle(
                     fontSize: 12,
                     color: Colors.white,

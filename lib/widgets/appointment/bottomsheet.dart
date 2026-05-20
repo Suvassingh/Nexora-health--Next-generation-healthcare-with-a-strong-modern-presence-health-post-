@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:healthpost_app/l10n/app_localizations.dart';
 
 import 'package:healthpost_app/models/doctor_appointment.dart';
 
@@ -18,7 +19,10 @@ class DetailSheet extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => DraggableScrollableSheet(
+  Widget build(BuildContext context)  {
+  final l = AppLocalizations.of(context)!;
+
+   return DraggableScrollableSheet(
     initialChildSize: 0.62,
     minChildSize: 0.4,
     maxChildSize: 0.92,
@@ -89,7 +93,7 @@ class DetailSheet extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Patient',
+                              l.patient,
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey.shade500,
@@ -103,23 +107,23 @@ class DetailSheet extends StatelessWidget {
                 const SizedBox(height: 20),
                 const Divider(),
                 const SizedBox(height: 12),
-                Rows(Icons.calendar_today_rounded, 'Date', appt.dateLabel),
-                Rows(Icons.access_time_rounded, 'Time', appt.timeLabel),
-                Rows(appt.consultIcon, 'Type', appt.consultLabel),
-                if (appt.patientNotes?.isNotEmpty == true)
-                  Rows(Icons.notes_rounded, 'Reason', appt.patientNotes!),
+               Rows(Icons.calendar_today_rounded, l.date, appt.dateLabel),
+                  Rows(Icons.access_time_rounded, l.time, appt.timeLabel),
+                  Rows(appt.consultIcon, l.type, appt.consultLabel),
+                  if (appt.patientNotes?.isNotEmpty == true)
+                    Rows(Icons.notes_rounded, l.reason, appt.patientNotes!),
                 const SizedBox(height: 24),
                 // Action buttons
                 if (onConfirm != null && onDecline != null) ...[
                   ActionBtn(
-                    label: 'Confirm Appointment',
+label: l.confirmAppointment,
                     icon: Icons.check_rounded,
                     color: const Color(0xFF1565C0),
                     onTap: onConfirm!,
                   ),
                   const SizedBox(height: 10),
                   ActionBtn(
-                    label: 'Decline Appointment',
+label: l.declineAppointment,
                     icon: Icons.close_rounded,
                     color: Colors.red,
                     outlined: true,
@@ -128,14 +132,14 @@ class DetailSheet extends StatelessWidget {
                 ],
                 if (onComplete != null && onNoShow != null) ...[
                   ActionBtn(
-                    label: 'Mark as Completed',
+label: l.markAsCompleted,
                     icon: Icons.check_circle_outline_rounded,
                     color: const Color(0xFF2E7D32),
                     onTap: onComplete!,
                   ),
                   const SizedBox(height: 10),
                   ActionBtn(
-                    label: 'Patient No-Show',
+label: l.patientNoShow,
                     icon: Icons.person_off_outlined,
                     color: Colors.brown.shade600,
                     outlined: true,
@@ -149,6 +153,7 @@ class DetailSheet extends StatelessWidget {
       ),
     ),
   );
+  }
 }
 
 class PatientAvatar extends StatelessWidget {

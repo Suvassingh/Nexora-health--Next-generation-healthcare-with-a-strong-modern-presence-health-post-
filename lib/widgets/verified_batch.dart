@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:healthpost_app/l10n/app_localizations.dart';
 
 
 class VerifBadge extends StatelessWidget {
   final bool verified;
   const VerifBadge({required this.verified});
   @override
-  Widget build(BuildContext context) => Container(
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+
+    return Container(
     padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
     decoration: BoxDecoration(
       color: verified
@@ -28,7 +32,7 @@ class VerifBadge extends StatelessWidget {
         ),
         const SizedBox(width: 5),
         Text(
-          verified ? 'NMC Verified' : 'Pending',
+verified ? l.nmcVerified : l.statusPending,
           style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w700,
@@ -38,4 +42,5 @@ class VerifBadge extends StatelessWidget {
       ],
     ),
   );
+}
 }
