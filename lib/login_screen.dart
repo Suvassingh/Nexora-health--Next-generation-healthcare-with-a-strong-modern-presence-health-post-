@@ -32,12 +32,13 @@ class _LoginScreenState extends State<LoginScreen> {
   final supabase = Supabase.instance.client;
 
   login() async {
+      final l = AppLocalizations.of(context)!;
     if (emailcontroller.text.trim().isEmpty) {
-      Get.snackbar("Error", "Please enter your email");
+       Get.snackbar(l.error, l.emailRequired);
       return;
     }
     if (passwordcontroller.text.trim().isEmpty) {
-      Get.snackbar("Error", "Please enter your password");
+      Get.snackbar(l.error, l.passwordRequired);
       return;
     }
     setState(() {

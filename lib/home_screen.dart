@@ -4,6 +4,7 @@ import 'package:healthpost_app/appointment_screen.dart';
 import 'package:healthpost_app/chat_list_screen.dart';
 import 'package:healthpost_app/chat_screen.dart';
 import 'package:healthpost_app/home_page.dart';
+import 'package:healthpost_app/l10n/app_localizations.dart';
 import 'package:healthpost_app/profile_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'controller/internet_status_controller.dart';
@@ -46,14 +47,23 @@ class _HomeScreenState extends State<HomeScreen> {
         selectedItemColor: Colors.redAccent,
         unselectedItemColor: Colors.grey,
         onTap: _onItemTapped,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+        items: [
           BottomNavigationBarItem(
-            icon: Icon(Icons.date_range),
-            label: 'Appointment',
+            icon: const Icon(Icons.home),
+            label: AppLocalizations.of(context)!.home,
           ),
-          BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'Chat'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+          BottomNavigationBarItem(
+            icon: const Icon(Icons.date_range),
+            label: AppLocalizations.of(context)!.appointment,
+          ),
+          BottomNavigationBarItem(
+            icon: const Icon(Icons.chat),
+            label: AppLocalizations.of(context)!.chat,
+          ),
+          BottomNavigationBarItem(
+            icon: const Icon(Icons.person),
+            label: AppLocalizations.of(context)!.profile,
+          ),
         ],
       ),
     );

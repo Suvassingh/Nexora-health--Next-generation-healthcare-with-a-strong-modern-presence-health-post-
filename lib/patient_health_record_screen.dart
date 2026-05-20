@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:get/get.dart';
+import 'package:healthpost_app/l10n/app_localizations.dart';
 import 'package:healthpost_app/services/selected_patient_provider.dart';
 import 'package:intl/intl.dart';
 import '../app_constants.dart';
@@ -21,11 +22,10 @@ class PatientHealthRecordScreen extends ConsumerWidget {
         appBar: AppBar(
           backgroundColor: AppConstants.primaryColor,
           foregroundColor: Colors.white,
-          title: const Text('Health Record'),
+title: Text(AppLocalizations.of(context)!.healthRecord),
         ),
-        body: const Center(
-          child: Text(
-            'No patient selected.',
+        body:  Center(
+        child: Text(AppLocalizations.of(context)!.noPatientSelected,
             style: TextStyle(color: Colors.black45),
           ),
         ),
@@ -46,21 +46,21 @@ class PatientHealthRecordScreen extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              _buildFlags(summary),
+              _buildFlags(summary,context),
               const SizedBox(height: 12),
-              _buildProfile(summary),
+              _buildProfile(summary,context),
               const SizedBox(height: 12),
-              _buildLatestVitals(summary),
+              _buildLatestVitals(summary,context),
               const SizedBox(height: 12),
-              _buildAllergies(summary),
+              _buildAllergies(summary,context),
               const SizedBox(height: 12),
-              _buildConditions(summary),
+              _buildConditions(summary,context),
               const SizedBox(height: 12),
-              _buildMedicalHistory(summary),
+              _buildMedicalHistory(summary,context),
               const SizedBox(height: 12),
-              _buildImmunisations(summary),
+              _buildImmunisations(summary,context),
               const SizedBox(height: 12),
-              _buildFamilyHistory(summary),
+              _buildFamilyHistory(summary,context),
               const SizedBox(height: 24),
             ],
           ),
@@ -83,7 +83,9 @@ class PatientHealthRecordScreen extends ConsumerWidget {
       backgroundColor: AppConstants.primaryColor,
       foregroundColor: Colors.white,
       title: Text(
-        patientName != null ? "$patientName's Record" : 'Health Record',
+        patientName != null
+            ? AppLocalizations.of(context)!.patientRecord(patientName!)
+            : AppLocalizations.of(context)!.healthRecord,
         style: const TextStyle(fontWeight: FontWeight.w600),
       ),
       actions: [
@@ -129,8 +131,7 @@ class PatientHealthRecordScreen extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              const Text(
-                'Switch patient',
+              Text(AppLocalizations.of(context)!.switchPatient,
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 8),
@@ -150,14 +151,20 @@ class PatientHealthRecordScreen extends ConsumerWidget {
                               color: Colors.red.shade300,
                             ),
                             const SizedBox(height: 8),
-                            Text('Could not load patients: $e'),
+                            Text(
+                              '${AppLocalizations.of(context)!.couldNotLoadPatients}: $e',
+                            ),
+
                           ],
                         ),
                       ),
                       data: (patients) {
                         if (patients.isEmpty) {
-                          return const Center(
-                            child: Text('No patients assigned to you.'),
+                          return  Center(
+                            child: Text(
+                              AppLocalizations.of(context)!.noPatientsAssigned,
+                            ),
+
                           );
                         }
                         return ListView.separated(
@@ -260,8 +267,7 @@ class PatientHealthRecordScreen extends ConsumerWidget {
                                               16,
                                             ),
                                           ),
-                                          child: const Text(
-                                            'Current',
+                                          child:  Text(AppLocalizations.of(context)!.current, 
                                             style: TextStyle(
                                               color: Colors.white,
                                               fontSize: 10,
@@ -292,7 +298,7 @@ class PatientHealthRecordScreen extends ConsumerWidget {
 
   //  FLAG BANNER 
 
-  Widget _buildFlags(Map<String, dynamic> summary) {
+  Widget _buildFlags(Map<String, dynamic> summary,BuildContext context) {
     final flags = Map<String, dynamic>.from(summary['flags'] ?? {});
     final active = <_Flag>[];
 
@@ -300,28 +306,28 @@ class PatientHealthRecordScreen extends ConsumerWidget {
       active.add(
         _Flag(
           Icons.warning_rounded,
-          'Severe allergy on record',
+         AppLocalizations.of(context)!.severeAllergyFlag,
           Colors.red.shade700,
         ),
       );
     }
     if (flags['low_spo2'] == true) {
       active.add(
-        _Flag(Icons.air, 'SpO₂ below 94% — check oxygen', Colors.red.shade700),
+        _Flag(Icons.air, AppLocalizations.of(context)!.lowSpo2Flag, Colors.red.shade700),
       );
     }
     if (flags['has_active_condition'] == true) {
       active.add(
         _Flag(
           Icons.favorite_border,
-          'Active chronic condition',
+          AppLocalizations.of(context)!.activeConditionFlag,
           Colors.orange.shade700,
         ),
       );
     }
     if (flags['has_overdue_vaccine'] == true) {
       active.add(
-        _Flag(Icons.vaccines, 'Overdue vaccine', Colors.orange.shade700),
+        _Flag(Icons.vaccines, AppLocalizations.of(context)!.overdueVaccineFlag, Colors.orange.shade700),
       );
     }
 
@@ -360,10 +366,10 @@ class PatientHealthRecordScreen extends ConsumerWidget {
 
   //  PROFILE CARD 
 
-  Widget _buildProfile(Map<String, dynamic> summary) {
+  Widget _buildProfile(Map<String, dynamic> summary,BuildContext context) {
     final p = Map<String, dynamic>.from(summary['profile'] ?? {});
     return _Card(
-      title: 'Patient',
+      title: AppLocalizations.of(context)!.patient,
       icon: Icons.person_outline,
       child: Column(
         children: [
@@ -458,14 +464,14 @@ class PatientHealthRecordScreen extends ConsumerWidget {
 
   //  LATEST VITALS 
 
-  Widget _buildLatestVitals(Map<String, dynamic> summary) {
+  Widget _buildLatestVitals(Map<String, dynamic> summary,BuildContext context) {
     final v = summary['vitals']?['latest'] as Map<String, dynamic>?;
     if (v == null) {
-      return const _Card(
-        title: 'Vitals',
+      return  _Card(
+        title: AppLocalizations.of(context)!.vitals,
         icon: Icons.monitor_heart_outlined,
         child: Text(
-          'No vitals recorded yet.',
+          AppLocalizations.of(context)!.noVitalsRecorded,
           style: TextStyle(color: Colors.black45),
         ),
       );
@@ -476,32 +482,33 @@ class PatientHealthRecordScreen extends ConsumerWidget {
         : '—';
 
     final items = [
-      _VitalTile('Blood pressure', bp, Icons.favorite_outline),
-      _VitalTile(
-        'Heart rate',
+     _VitalTile(AppLocalizations.of(context)!.bloodPressure, bp,  Icons.favorite_outline),
+     _VitalTile(
+        AppLocalizations.of(context)!.heartRate,
         v['heart_rate'] != null ? '${v['heart_rate']} bpm' : '—',
         Icons.monitor_heart_outlined,
       ),
-      _VitalTile('SpO₂', v['spo2'] != null ? '${v['spo2']}%' : '—', Icons.air),
+     _VitalTile(
+        AppLocalizations.of(context)!.spo2, v['spo2'] != null ? '${v['spo2']}%' : '—', Icons.air),
       _VitalTile(
-        'Temperature',
+        AppLocalizations.of(context)!.temperature,
         v['temperature_c'] != null ? '${v['temperature_c']}°C' : '—',
         Icons.thermostat,
       ),
       _VitalTile(
-        'Weight',
+        AppLocalizations.of(context)!.weight,
         v['weight_kg'] != null ? '${v['weight_kg']} kg' : '—',
         Icons.scale_outlined,
       ),
-      _VitalTile(
-        'BMI',
+     _VitalTile(
+        AppLocalizations.of(context)!.bmi,
         v['bmi'] != null ? '${v['bmi']}' : '—',
         Icons.bar_chart,
       ),
     ];
 
     return _Card(
-      title: 'Latest vitals',
+      title: AppLocalizations.of(context)!.latestVitals,
       icon: Icons.monitor_heart_outlined,
       subtitle: _fmt(v['recorded_at'] as String?),
       child: GridView.count(
@@ -551,17 +558,17 @@ class PatientHealthRecordScreen extends ConsumerWidget {
 
   //  ALLERGIES 
 
-  Widget _buildAllergies(Map<String, dynamic> summary) {
+  Widget _buildAllergies(Map<String, dynamic> summary,BuildContext context) {
     final list = (summary['allergies'] as List? ?? [])
         .whereType<Map<String, dynamic>>()
         .toList();
     return _Card(
-      title: 'Allergies',
+      title: AppLocalizations.of(context)!.allergies,
       icon: Icons.warning_amber_outlined,
       count: list.length,
       child: list.isEmpty
-          ? const Text(
-              'None recorded.',
+          ?  Text(
+             AppLocalizations.of(context)!.noneRecorded,
               style: TextStyle(color: Colors.black45),
             )
           : Column(children: list.map(_buildAllergyTile).toList()),
@@ -614,12 +621,12 @@ class PatientHealthRecordScreen extends ConsumerWidget {
 
   //  CONDITIONS 
 
-  Widget _buildConditions(Map<String, dynamic> summary) {
+  Widget _buildConditions(Map<String, dynamic> summary,BuildContext context) {
     final list = (summary['conditions'] as List? ?? [])
         .whereType<Map<String, dynamic>>()
         .toList();
     return _Card(
-      title: 'Chronic conditions',
+      title: AppLocalizations.of(context)!.chronicConditions,
       icon: Icons.health_and_safety_outlined,
       count: list.length,
       child: list.isEmpty
@@ -677,27 +684,27 @@ class PatientHealthRecordScreen extends ConsumerWidget {
 
   //  MEDICAL HISTORY 
 
-  Widget _buildMedicalHistory(Map<String, dynamic> summary) {
+  Widget _buildMedicalHistory(Map<String, dynamic> summary,BuildContext context) {
     final list = (summary['medical_history'] as List? ?? [])
         .whereType<Map<String, dynamic>>()
         .toList();
     return _Card(
-      title: 'Past consultations',
+      title: AppLocalizations.of(context)!.pastConsultations,
       icon: Icons.history,
       count: list.length,
       child: list.isEmpty
-          ? const Text(
-              'No history yet.',
+          ?  Text(
+              AppLocalizations.of(context)!.noHistoryYet,
               style: TextStyle(color: Colors.black45),
             )
-          : Column(children: list.take(5).map(_buildHistoryTile).toList()),
+          : Column(children: list.take(5).map((h) => _buildHistoryTile(h, context)).toList() ),
     );
   }
 
-  Widget _buildHistoryTile(Map<String, dynamic> h) {
+  Widget _buildHistoryTile(Map<String, dynamic> h ,BuildContext context) {
     final doctorName =
         h['doctors']?['user_profiles']?['full_name'] as String? ??
-        'Unknown doctor';
+        AppLocalizations.of(context)!.unknownDoctor;
     final specialty = h['doctors']?['specialty'] as String? ?? '';
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -745,12 +752,12 @@ class PatientHealthRecordScreen extends ConsumerWidget {
 
   //  IMMUNISATIONS 
 
-  Widget _buildImmunisations(Map<String, dynamic> summary) {
-    final list = (summary['immunisations'] as List? ?? [])
+  Widget _buildImmunisations(Map<String, dynamic> summary,BuildContext context) {
+    final list = (summary[AppLocalizations.of(context)!.immunisations] as List? ?? [])
         .whereType<Map<String, dynamic>>()
         .toList();
     return _Card(
-      title: 'Immunisations',
+      title: AppLocalizations.of(context)!.immunisations,
       icon: Icons.vaccines_outlined,
       count: list.length,
       child: list.isEmpty
@@ -791,13 +798,13 @@ class PatientHealthRecordScreen extends ConsumerWidget {
 
   //  FAMILY HISTORY 
 
-  Widget _buildFamilyHistory(Map<String, dynamic> summary) {
-    final list = (summary['family_history'] as List? ?? [])
+  Widget _buildFamilyHistory(Map<String, dynamic> summary,BuildContext context) {
+    final list = (summary[AppLocalizations.of(context)!.familyHistory] as List? ?? [])
         .whereType<Map<String, dynamic>>()
         .toList();
     if (list.isEmpty) return const SizedBox.shrink();
     return _Card(
-      title: 'Family history',
+      title: AppLocalizations.of(context)!.familyHistory,
       icon: Icons.people_outline,
       child: Column(children: list.map(_buildFamilyTile).toList()),
     );
@@ -841,8 +848,7 @@ class PatientHealthRecordScreen extends ConsumerWidget {
       children: [
         Icon(Icons.error_outline, size: 48, color: Colors.red.shade300),
         const SizedBox(height: 12),
-        Text(
-          'Could not load record',
+        Text(AppLocalizations.of(context)!.couldNotLoadRecord,
           style: TextStyle(color: Colors.grey.shade600),
         ),
         const SizedBox(height: 4),
@@ -862,7 +868,7 @@ class PatientHealthRecordScreen extends ConsumerWidget {
             backgroundColor: AppConstants.primaryColor,
             foregroundColor: Colors.white,
           ),
-          child: const Text('Retry'),
+child: Text(AppLocalizations.of(context)!.retry),
         ),
       ],
     ),

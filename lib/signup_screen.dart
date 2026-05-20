@@ -95,7 +95,7 @@ class _SignupScreenState extends State<SignupScreen>
       _healthpostError = null;
     } catch (e) {
       _healthpostsLoaded = false;         
-      _healthpostError = 'Could not load healthposts. Tap to retry.';
+      _healthpostError = AppLocalizations.of(context)!.couldNotLoadHealthposts;
       debugPrint('[Healthpost] fetch error: $e');
     } finally {
       if (mounted) setState(() => _loadingHealthposts = false);
@@ -178,8 +178,7 @@ class _SignupScreenState extends State<SignupScreen>
                       Icon(Icons.local_hospital,
                           color: AppConstants.primaryColor, size: 20),
                       const SizedBox(width: 8),
-                      Text(
-                        'Select Healthpost',
+                      Text(AppLocalizations.of(context)!.selectHealthpost, 
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -218,7 +217,8 @@ class _SignupScreenState extends State<SignupScreen>
 
                           },
                           icon: const Icon(Icons.refresh, size: 16),
-                          label: const Text('Retry'),
+                          label: Text(AppLocalizations.of(context)!.retry),
+
                           style: TextButton.styleFrom(
                             foregroundColor: AppConstants.primaryColor,
                           ),
@@ -233,7 +233,8 @@ class _SignupScreenState extends State<SignupScreen>
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
-                            '${displayed.length} found',                            style: TextStyle(
+                            '${displayed.length} ${AppLocalizations.of(context)!.found}',
+                            style: TextStyle(
                               fontSize: 12,
                               color: AppConstants.primaryColor,
                               fontWeight: FontWeight.w600,
@@ -252,7 +253,8 @@ class _SignupScreenState extends State<SignupScreen>
                     autofocus: _healthpostsLoaded && _healthpostError == null,
                     enabled: !_loadingHealthposts && _healthpostError == null,
                     decoration: InputDecoration(
-                      hintText: 'Search by name or district…',
+                      hintText: AppLocalizations.of(context)!.searchHealthpost,
+
                       prefixIcon: const Icon(Icons.search, size: 20),
                       suffixIcon: ValueListenableBuilder(
                         valueListenable: _hpSearchCtrl,
@@ -289,14 +291,13 @@ class _SignupScreenState extends State<SignupScreen>
 
                 Expanded(
                   child: _loadingHealthposts
-                      ? const Center(
+                      ?  Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         CircularProgressIndicator(),
                         SizedBox(height: 12),
-                        Text('Loading healthposts…',
-                            style: TextStyle(color: Colors.black54)),
+                        Text(AppLocalizations.of(context)!.loadingHealthposts,                             style: TextStyle(color: Colors.black54)),
                       ],
                     ),
                   )
@@ -327,8 +328,7 @@ class _SignupScreenState extends State<SignupScreen>
                             size: 48,
                             color: Colors.grey.shade400),
                         const SizedBox(height: 8),
-                        Text(
-                          'No healthposts found',
+                        Text(AppLocalizations.of(context)!.noHealthpostsFound,
                           style: TextStyle(
                               color: Colors.grey.shade500),
                         ),
@@ -413,6 +413,7 @@ class _SignupScreenState extends State<SignupScreen>
     if (!_validateDoctorFields()) return;
     if (!_validateAccountFields()) return;
 
+    final l = AppLocalizations.of(context)!; 
     setState(() => loading = true);
     try {
       final result = await supabase.auth.signUp(
@@ -421,9 +422,7 @@ class _SignupScreenState extends State<SignupScreen>
       );
 
       if (result.user == null) {
-        Get.snackbar(
-          'Error',
-          'Sign up failed. Please try again.',
+              Get.snackbar(l.error, l.signUpFailed,
           backgroundColor: Colors.redAccent,
           colorText: Colors.white,
         );
@@ -436,24 +435,18 @@ class _SignupScreenState extends State<SignupScreen>
 
       await _saveDoctorProfile(userId: userId);
 
-      Get.snackbar(
-        'सफल! / Success',
-        'Doctor account created successfully!',
+         Get.snackbar(l.success, l.doctorAccountCreated,
         backgroundColor: Colors.green.shade100,
         duration: const Duration(seconds: 2),
       );
       await Future.delayed(const Duration(seconds: 2));
       Get.offAll(() => LoginScreen());
     } on AuthException catch (e) {
-      Get.snackbar(
-        'Sign Up Failed',
-        _authErrorMessage(e.message),
+          Get.snackbar(l.signUpFailed, _authErrorMessage(e.message), 
         backgroundColor: Colors.red.shade100,
       );
     } catch (e) {
-      Get.snackbar(
-        'Sign Up Failed',
-        e.toString(),
+         Get.snackbar(l.signUpFailed, e.toString(),
         backgroundColor: Colors.redAccent,
       );
     } finally {
@@ -462,6 +455,7 @@ class _SignupScreenState extends State<SignupScreen>
   }
 
   Future<void> continueWithGoogle() async {
+    final l = AppLocalizations.of(context)!; 
     setState(() => loading = true);
     try {
       final signIn = GoogleSignIn.instance;
@@ -526,18 +520,15 @@ class _SignupScreenState extends State<SignupScreen>
       Get.offAll(() => HomeScreen());
 
       if (!hasCompleteProfile) {
-        Get.snackbar(
-          'प्रोफाइल अपूर्ण',
-          'Please complete your doctor profile in settings.',
+            Get.snackbar(l.incompleteProfile, l.completeDoctorProfileHint,
           backgroundColor: Colors.orange.shade100,
           duration: const Duration(seconds: 4),
         );
       }
     } catch (e) {
       Get.snackbar(
-        'Google Sign-In Failed',
+        AppLocalizations.of(context)!.googleSignInFailed,
         e.toString(),
-        backgroundColor: Colors.red.shade100,
       );
       logger(
         e.toString(),
@@ -584,72 +575,80 @@ class _SignupScreenState extends State<SignupScreen>
   }
 
   bool _validatePersonalFields() {
+    final l = AppLocalizations.of(context)!;
+
     if (nameController.text.trim().isEmpty) {
-      _snackError('Name is required');
+_snackError(l.nameRequired);
       return false;
     }
     if (phoneController.text.trim().isEmpty) {
-      _snackError('Phone is required');
+     _snackError(l.phoneRequired);
+
       return false;
     }
     if (ageController.text.trim().isEmpty) {
-      _snackError('Age is required');
+     _snackError(l.ageRequired);
       return false;
     }
     if (selectedGender == null) {
-      _snackError('Gender is required');
+      _snackError(l.genderRequired);
       return false;
     }
     if (_selectedProvince == null) {
-      _snackError('Province is required');
+      _snackError(l.provinceRequired);
       return false;
     }
     if (_selectedDistrict == null) {
-      _snackError('District is required');
+      _snackError(l.districtRequired);
       return false;
     }
     return true;
   }
 
   bool _validateDoctorFields() {
+    final l = AppLocalizations.of(context)!;
+
     if (licenseNumberController.text.trim().isEmpty) {
-      _snackError('NMC License Number is required');
+      _snackError(l.nmcLicenseRequired);
+
       return false;
     }
     if (selectedSpecialty == null || selectedSpecialty!.isEmpty) {
-      _snackError('Specialty is required');
+_snackError(l.specialtyRequired);
       return false;
     }
-    if (qualificationController.text.trim().isEmpty) {
-      _snackError('Qualification is required (e.g. MBBS, MD)');
+   if (qualificationController.text.trim().isEmpty) {
+      _snackError(l.qualificationRequired);
       return false;
     }
     if (_selectedHealthpost == null) {
-      _snackError('Please select your assigned healthpost');
+     _snackError(l.healthpostRequired);
+
       return false;
     }
     return true;
   }
 
   bool _validateAccountFields() {
+        final l = AppLocalizations.of(context)!;
+
     if (emailcontroller.text.trim().isEmpty) {
-      _snackError('Email is required');
+_snackError(l.emailRequired);
       return false;
     }
     if (passwordcontroller.text.length < 6) {
-      _snackError('Password must be at least 6 characters');
+     _snackError(l.passwordMinSix);
+
       return false;
     }
     if (passwordcontroller.text != confirmPasswordController.text) {
-      _snackError('Passwords do not match');
+_snackError(l.passwordMismatch);
       return false;
     }
     return true;
   }
 
-  void _snackError(String message) => Get.snackbar(
-    'Error',
-    message,
+  void _snackError(String message) => Get.snackbar(AppLocalizations.of(context)!.error, message,
     backgroundColor: Colors.redAccent,
     colorText: Colors.white,
   );
@@ -677,12 +676,13 @@ class _SignupScreenState extends State<SignupScreen>
   }
 
   String _authErrorMessage(String message) {
-    if (message.contains('already registered') ||
-        message.contains('User already registered')) {
-      return 'This email is already registered. Please login instead.';
+    final l = AppLocalizations.of(context)!;
+
+    if (message.contains('already registered')) {
+      return l.emailAlreadyRegistered;
     }
-    if (message.contains('invalid email')) {
-      return 'Please enter a valid email address.';
+  if (message.contains('invalid email')) {
+      return l.invalidEmail;
     }
     return message;
   }
@@ -723,10 +723,10 @@ class _SignupScreenState extends State<SignupScreen>
               labelColor: Colors.white,
               unselectedLabelColor: Colors.white70,
               indicatorColor: AppConstants.whiteColor,
-              tabs: const [
-                Tab(text: 'Personal Info'),
-                Tab(text: 'Doctor Info'),
-                Tab(text: 'Account Info'),
+              tabs: [
+                Tab(text: loc.personalInfo),
+                Tab(text: loc.doctorInfo),
+                Tab(text: loc.accountInfo),
               ],
             ),
             title: const Row(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:get/get.dart';
+import 'package:healthpost_app/l10n/app_localizations.dart';
 import 'package:healthpost_app/services/selected_patient_provider.dart';
 import '../app_constants.dart';
 import '../services/patient_health_provider.dart'; 
@@ -21,8 +22,7 @@ class DoctorPatientListScreen extends ConsumerWidget {
         ),
         backgroundColor: AppConstants.primaryColor,
         foregroundColor: Colors.white,
-        title: const Text(
-          'My Patients',
+        title: Text(AppLocalizations.of(context)!.myPatients,
           style: TextStyle(fontWeight: FontWeight.w600),
         ),
         actions: [
@@ -48,16 +48,15 @@ class DoctorPatientListScreen extends ConsumerWidget {
                   backgroundColor: AppConstants.primaryColor,
                   foregroundColor: Colors.white,
                 ),
-                child: const Text('Retry'),
+child: Text(AppLocalizations.of(context)!.retry),
               ),
             ],
           ),
         ),
         data: (patients) {
           if (patients.isEmpty) {
-            return const Center(
-              child: Text(
-                'No patients yet.',
+            return  Center(
+              child: Text(AppLocalizations.of(context)!.noPatientsYet,
                 style: TextStyle(color: Colors.black45),
               ),
             );
@@ -119,7 +118,9 @@ class DoctorPatientListScreen extends ConsumerWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  patientName ?? 'Unknown',
+                                  patientName ??
+                                      AppLocalizations.of(context)!.unknown,
+
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w600,
                                     fontSize: 14,

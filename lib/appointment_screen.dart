@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:get/get.dart';
 import 'package:healthpost_app/call_screen.dart';
 import 'package:healthpost_app/chat_screen.dart';
+import 'package:healthpost_app/l10n/app_localizations.dart';
 import 'package:healthpost_app/models/notification_model.dart';
 import 'package:healthpost_app/notification_screen.dart';
 import 'package:healthpost_app/providers/appointment_provider.dart';
@@ -61,14 +62,16 @@ class _DoctorAppointmentsScreenState
       Future<void> Function(String) apiCall, {
         String? snackMsg,
       }) async {
+          final l = AppLocalizations.of(context)!; // cache before await
+
     setState(() => _processing = true);
     try {
       await ref
           .read(appointmentsProvider.notifier)
           .updateStatus(apptId, apiCall);
       Get.snackbar(
-        'Updated',
-        snackMsg ?? 'Status updated',
+        l.updated,
+      snackMsg ?? l.statusUpdated,
         backgroundColor: const Color(0xFFEAF7EF),
         colorText: const Color(0xFF1A7A4A),
         borderRadius: 12,
@@ -76,9 +79,7 @@ class _DoctorAppointmentsScreenState
         duration: const Duration(seconds: 3),
       );
     } catch (e) {
-      Get.snackbar(
-        'Error',
-        'Could not update: $e',
+     Get.snackbar(l.error, '${l.couldNotUpdate}: $e',
         backgroundColor: const Color(0xFFFEF2F2),
         colorText: const Color(0xFFEF4444),
         borderRadius: 12,
@@ -91,64 +92,67 @@ class _DoctorAppointmentsScreenState
 
   Future<void> _confirmAppt(DAppt a) async {
     final ok = await _confirmDialog(
-      title: 'Confirm appointment?',
+      title: AppLocalizations.of(context)!.confirmAppointmentQ,
       body: '${a.patientName}  •  ${a.dateTimeLabel}',
-      confirmLabel: 'Confirm',
+      confirmLabel: AppLocalizations.of(context)!.confirm,
       confirmColor: const Color(0xFF1565C0),
     );
     if (ok == true) {
       await _updateStatus(
         a.id,
         ApiService.confirmAppointment,
-        snackMsg: 'Appointment confirmed for ${a.patientName}',
+       snackMsg: AppLocalizations.of(
+          context,
+        )!.appointmentConfirmedFor(a.patientName),
       );
     }
   }
 
   Future<void> _declineAppt(DAppt a) async {
     final ok = await _confirmDialog(
-      title: 'Decline appointment?',
-      body: '${a.patientName}  •  ${a.dateTimeLabel}\nThis will cancel the booking.',
-      confirmLabel: 'Decline',
+     title: AppLocalizations.of(context)!.declineAppointmentQ,
+      body:
+          '${a.patientName}  •  ${a.dateTimeLabel}\n${AppLocalizations.of(context)!.declineWarning}',
+      confirmLabel: AppLocalizations.of(context)!.decline,
       confirmColor: Colors.red,
     );
     if (ok == true) {
       await _updateStatus(
         a.id,
         ApiService.cancelAppointment,
-        snackMsg: 'Appointment declined',
+snackMsg: AppLocalizations.of(context)!.appointmentDeclined,
       );
     }
   }
 
   Future<void> _completeAppt(DAppt a) async {
     final ok = await _confirmDialog(
-      title: 'Mark as completed?',
-      body: 'Consultation with ${a.patientName} has ended.',
-      confirmLabel: 'Complete',
+      title: AppLocalizations.of(context)!.markAsCompleted,
+      body: AppLocalizations.of(context)!.consultationEndedWith(a.patientName),
+      confirmLabel: AppLocalizations.of(context)!.complete,
       confirmColor: const Color(0xFF2E7D32),
     );
     if (ok == true) {
       await _updateStatus(
         a.id,
         ApiService.completeAppointment,
-        snackMsg: 'Consultation marked complete',
+snackMsg: AppLocalizations.of(context)!.consultationMarkedComplete,
       );
     }
   }
 
   Future<void> _noShowAppt(DAppt a) async {
     final ok = await _confirmDialog(
-      title: 'Mark as no-show?',
-      body: '${a.patientName} did not join the appointment.',
-      confirmLabel: 'No Show',
+   title: AppLocalizations.of(context)!.markAsNoShow,
+      body: AppLocalizations.of(context)!.patientDidNotJoin(a.patientName),
+      confirmLabel: AppLocalizations.of(context)!.noShow,
       confirmColor: Colors.brown.shade600,
     );
     if (ok == true) {
       await _updateStatus(
         a.id,
         ApiService.noShowAppointment,
-        snackMsg: 'Marked as no-show',
+snackMsg: AppLocalizations.of(context)!.markedAsNoShow,
       );
     }
   }
@@ -177,7 +181,11 @@ class _DoctorAppointmentsScreenState
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
               child:
-              const Text('Cancel', style: TextStyle(color: Colors.grey)),
+              Text(
+            AppLocalizations.of(context)!.cancel,
+            style: const TextStyle(color: Colors.grey),
+          ),
+
             ),
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx, true),
@@ -229,6 +237,8 @@ class _DoctorAppointmentsScreenState
   );
 
   Future<void> _startConsultation(DAppt appt) async {
+      final l = AppLocalizations.of(context)!; 
+
     final type = appt.consultType.toLowerCase();
     if (type == 'video' || type == 'audio') {
       final isVideo = type == 'video';
@@ -250,7 +260,7 @@ class _DoctorAppointmentsScreenState
           ),
         );
       } catch (e) {
-        Get.snackbar('Error', 'Could not start call: $e');
+        Get.snackbar(l.error, '${l.callFailed}: $e');
       }
     } else {
       Get.to(() => ChatScreen(appt: appt));
@@ -296,8 +306,8 @@ class _DoctorAppointmentsScreenState
       onPressed: () => Get.back(),
     )
         : null,
-    title: const Text(
-      'Appointments',
+    title: Text(
+      AppLocalizations.of(context)!.appointments,
       style: TextStyle(
         fontSize: 17,
         fontWeight: FontWeight.bold,
@@ -374,21 +384,21 @@ class _DoctorAppointmentsScreenState
       tabs: [
         Tab(
           text: data != null && data.pending.isNotEmpty
-              ? 'Pending (${data.pending.length})'
-              : 'Pending',
+              ? '${AppLocalizations.of(context)!.pending} (${data.pending.length})'
+              : AppLocalizations.of(context)!.pending,
         ),
         Tab(
           text: data != null && data.today.isNotEmpty
-              ? 'Today (${data.today.length})'
-              : 'Today',
+              ? '${AppLocalizations.of(context)!.today} (${data.today.length})'
+              : AppLocalizations.of(context)!.today,
         ),
         Tab(
           text: data != null && data.upcoming.isNotEmpty
-              ? 'Upcoming (${data.upcoming.length})'
-              : 'Upcoming',
+              ? '${AppLocalizations.of(context)!.upcoming} (${data.upcoming.length})'
+              : AppLocalizations.of(context)!.upcoming,
         ),
-        const Tab(text: 'Completed'),
-        const Tab(text: 'Cancelled'),
+        Tab(text: AppLocalizations.of(context)!.completed),
+        Tab(text: AppLocalizations.of(context)!.cancelled),
       ],
     ),
   );
@@ -424,28 +434,26 @@ class _DoctorAppointmentsScreenState
   }
 
   Widget _buildEmpty(String type) {
+      final l = AppLocalizations.of(context)!;
+
     final map = {
       'pending': [
         Icons.hourglass_empty_rounded,
-        'No pending requests',
-        'New appointment requests will appear here',
+        l.noPendingRequests,
+        l.pendingAppearsHere,
       ],
-      'today': [
-        Icons.today_rounded,
-        'No appointments today',
-        'Your confirmed appointments for today appear here',
-      ],
+      'today': [Icons.today_rounded, l.noAppointmentsToday, l.todayAppearsHere],
       'upcoming': [
         Icons.calendar_today_outlined,
-        'No upcoming appointments',
-        'Future confirmed appointments will appear here',
+        l.noUpcomingAppointments,
+        l.upcomingAppearsHere,
       ],
       'completed': [
         Icons.check_circle_outline_rounded,
-        'No completed consultations yet',
-        'Consultations you finish will appear here',
+        l.noCompletedConsultations,
+        l.completedAppearsHere,
       ],
-      'cancelled': [Icons.cancel_outlined, 'No cancelled appointments', ''],
+      'cancelled': [Icons.cancel_outlined, l.noCancelledAppointments, ''],
     };
     final info = map[type]!;
     return Center(
@@ -498,7 +506,7 @@ class _DoctorAppointmentsScreenState
               size: 48, color: Colors.grey.shade300),
           const SizedBox(height: 12),
           Text(
-            'Could not load appointments',
+            AppLocalizations.of(context)!.couldNotLoadAppointments,
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,
@@ -517,7 +525,7 @@ class _DoctorAppointmentsScreenState
             onPressed: () =>
                 ref.read(appointmentsProvider.notifier).refresh(),
             icon: const Icon(Icons.refresh_rounded),
-            label: const Text('Retry'),
+label: Text(AppLocalizations.of(context)!.retry),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppConstants.primaryColor,
               foregroundColor: Colors.white,

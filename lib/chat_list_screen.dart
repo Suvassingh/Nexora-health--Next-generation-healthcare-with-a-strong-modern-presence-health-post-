@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:get/get.dart';
 import 'package:healthpost_app/app_constants.dart';
 import 'package:healthpost_app/chat_screen.dart';
+import 'package:healthpost_app/l10n/app_localizations.dart';
 import 'package:healthpost_app/providers/chat_provider.dart';
 import 'package:healthpost_app/widgets/doctor_chat_title.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -62,8 +63,7 @@ class _DoctorChatListScreenState
         elevation: 0,
         backgroundColor:AppConstants.primaryColor,
         foregroundColor: Colors.white,
-        title: const Text(
-          'Patient Messages',
+        title:Text(AppLocalizations.of(context)!.patientMessages,
           style: TextStyle(fontWeight: FontWeight.w600, fontSize: 20),
         ),
         actions: [
@@ -82,7 +82,7 @@ class _DoctorChatListScreenState
           child: ElevatedButton(
             onPressed: () =>
                 ref.read(chatListProvider.notifier).refresh(),
-            child: const Text("Retry"),
+child: Text(AppLocalizations.of(context)!.retry),
           ),
         ),
 
@@ -109,8 +109,9 @@ class _DoctorChatListScreenState
   }
 
   Widget _buildEmpty() {
-    return const Center(
-      child: Text("No patient chats yet"),
+    return  Center(
+      child: Text(AppLocalizations.of(context)!.noPatientChatsYet),
+
     );
   }
 }

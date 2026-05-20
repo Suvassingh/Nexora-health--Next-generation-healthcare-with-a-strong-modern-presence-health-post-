@@ -5,6 +5,7 @@ import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get/get.dart';
+import 'package:healthpost_app/l10n/app_localizations.dart';
 import 'package:healthpost_app/models/doctor_appointment.dart';
 import 'package:healthpost_app/services/encryption_service.dart';
 import 'package:image_picker/image_picker.dart';
@@ -59,6 +60,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _initializeChat() async {
     if (!mounted) return;
+      final l = AppLocalizations.of(context)!; 
     setState(() => _loading = true);
     try {
       await _ensureUserKeyPair();
@@ -76,6 +78,7 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     }
   }
+
 
 
   Future<void> _ensureUserKeyPair() async {
@@ -355,6 +358,7 @@ Future<void> _sendMessage() async {
   }
 Future<void> _uploadAndSendMedia(File file, String mediaType) async {
     if (_sending) return;
+    final l = AppLocalizations.of(context)!;
     if(mounted){
       setState(() => _sending = true);
     }
@@ -404,7 +408,8 @@ Future<void> _uploadAndSendMedia(File file, String mediaType) async {
       if(mounted){
         setState(() => _messages.removeWhere((m) => m['id'] == null));
       }
-      Get.snackbar('Error', 'Failed to send media: $e');
+        Get.snackbar(l.error, '${l.mediaUploadFailed}: $e');
+
     } finally {
 if(mounted){
   setState(() => _sending = false);
@@ -477,7 +482,7 @@ if(mounted){
               child: TextField(
                 controller: _messageController,
                 decoration: InputDecoration(
-                  hintText: 'Type a message…',
+hintText: AppLocalizations.of(context)!.typeAMessage,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(24),
                     borderSide: BorderSide.none,

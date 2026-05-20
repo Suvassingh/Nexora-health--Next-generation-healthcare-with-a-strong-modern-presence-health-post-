@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:healthpost_app/controller/locale_conreoller.dart';
+import 'package:healthpost_app/l10n/app_localizations.dart';
 import 'package:healthpost_app/models/doctor_model.dart';
 import 'package:healthpost_app/providers/profile_providers.dart';
 import 'package:healthpost_app/services/tts_service.dart';
@@ -36,7 +37,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen>
     LocaleController(),
     permanent: true,
   );
-
+AppLocalizations get _l => AppLocalizations.of(context)!;
   DoctorProfileModel? doctor;
   bool loading = true;
   String? error;
@@ -181,11 +182,13 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen>
 
   Future<void> _saveProfile() async {
     if (_fullNameCtrl.text.trim().isEmpty) {
-      _showSnack('Full name cannot be empty', isError: true);
+     _showSnack(_l.fullNameRequired, isError: true);
+
       return;
     }
     if (_licenseCtrl.text.trim().isEmpty) {
-      _showSnack('NMC license number is required', isError: true);
+      _showSnack(_l.nmcLicenseRequired, isError: true);
+
       return;
     }
 
@@ -226,17 +229,18 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen>
         _editMode = false;
         _saving = false;
       });
-      _showSnack('Profile updated successfully');
+_showSnack(_l.profileUpdated);
 
     } catch (e) {
       setState(() => _saving = false);
-      _showSnack('Failed to save: ${e.toString()}', isError: true);
+      _showSnack('${_l.failedToSave}: ${e.toString()}', isError: true);
+
     }
   }
 
   void _showSnack(String msg, {bool isError = false}) {
     Get.snackbar(
-      isError ? 'Error' : 'Success',
+      isError ? _l.error : _l.success,
       msg,
       backgroundColor: isError
           ? const Color(0xFFFEF2F2)
@@ -433,8 +437,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen>
                 size: 16,
                 color: Colors.white,
               ),
-              label: const Text(
-                'Edit',
+              label: Text(_l.edit,
                 style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w600,
@@ -457,8 +460,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen>
           // Cancel
           TextButton(
             onPressed: _saving ? null : _cancelEdit,
-            child: const Text(
-              'Cancel',
+            child: Text(_l.back,
               style: TextStyle(
                 color: Colors.white70,
                 fontWeight: FontWeight.w600,
@@ -488,8 +490,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen>
                       size: 16,
                       color: Colors.white,
                     ),
-                    label: const Text(
-                      'Save',
+                    label: Text(_l.save,
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
@@ -550,9 +551,8 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen>
                     color: Color(0xFFF39C12),
                   ),
                   const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text(
-                      'Edit mode — tap any field to change it',
+                   Expanded(
+                    child:Text(_l.editModeHint,
                       style: TextStyle(
                         fontSize: 12,
                         color: Color(0xFFA06000),
@@ -594,32 +594,32 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen>
                 )
               : InfoCard(
                   sectionIcon: Icons.person_outline_rounded,
-                  title: 'Personal Details',
+                  title: _l.personalDetails,
                   rows: [
                     IR(
                       Icons.badge_outlined,
-                      'Full Name',
+                     _l.name,
                       d.fullName.isEmpty ? '—' : d.fullName,
                     ),
                     IR(
                       Icons.phone_outlined,
-                      'Phone',
+                     _l.phone,
                       d.phone.isEmpty ? '—' : d.phone,
                     ),
                     IR(
                       Icons.email_outlined,
-                      'Email',
+                    _l.email,
                       d.email.isEmpty ? '—' : d.email,
                     ),
-                    IR(Icons.wc_rounded, 'Gender', _cap(d.gender)),
+                    IR(Icons.wc_rounded, _l.gender, _cap(d.gender)),
                     IR(
                       Icons.cake_outlined,
-                      'Date of Birth',
+                      _l.dateOfBirth,
                       _fmtDate(d.dateOfBirth),
                     ),
                     IR(
                       Icons.location_on_outlined,
-                      'Municipality',
+                     _l.municipality,
                       d.municipality ?? '—',
                     ),
                   ],
@@ -629,7 +629,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen>
           _editMode
               ? EditSection(
                   sectionIcon: Icons.local_hospital_outlined,
-                  title: 'Professional Details',
+                  title: _l.personalDetails,
                   child: _ProfessionalEditForm(
                     licenseCtrl: _licenseCtrl,
                     qualificationCtrl: _qualificationCtrl,
@@ -644,38 +644,38 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen>
                 )
               : InfoCard(
                   sectionIcon: Icons.local_hospital_outlined,
-                  title: 'Professional Details',
+                  title: _l.professionalDetails,
                   rows: [
                     IR(
                       Icons.workspace_premium_outlined,
-                      'NMC License',
+                     _l.nmcLicense,
                       d.licenseNumber.isEmpty ? '—' : d.licenseNumber,
                     ),
                     IR(
                       Icons.medical_services_outlined,
-                      'Specialty',
+                    _l.specialty,
                       d.specialty.isEmpty ? '—' : d.specialty,
                     ),
                     IR(
                       Icons.school_outlined,
-                      'Qualification',
+                     _l.qualification,
                       d.qualification.isEmpty ? '—' : d.qualification,
                     ),
                     IR(
                       Icons.timer_outlined,
-                      'Experience',
+                     _l.experience,
                       d.experienceYears != null
                           ? '${d.experienceYears} years'
                           : '—',
                     ),
                     IR(
                       Icons.home_outlined,
-                      'Health Post',
+                      _l.healthPost,
                       d.healthpostName.isEmpty ? '—' : d.healthpostName,
                     ),
                     IR(
                       Icons.calendar_today_outlined,
-                      'Doctor Since',
+                    _l.doctorSince,
                       _fmtDate(d.doctorSince),
                     ),
                   ],
@@ -747,8 +747,7 @@ class EditSection extends StatelessWidget {
                     color: const Color(0xFFF39C12).withOpacity(0.4),
                   ),
                 ),
-                child: const Text(
-                  'Editing',
+                child: Text(AppLocalizations.of(context)!.editing,
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
@@ -804,64 +803,67 @@ class _PersonalEditForm extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(16),
-    child: Column(
-      children: [
-        EditField(
-          icon: Icons.badge_outlined,
-          label: 'Full Name *',
-          controller: fullNameCtrl,
-          hint: 'Enter full name',
-          inputType: TextInputType.name,
-          capitalization: TextCapitalization.words,
-        ),
-        const SizedBox(height: 14),
-        EditField(
-          icon: Icons.phone_outlined,
-          label: 'Phone',
-          controller: phoneCtrl,
-          hint: '+977 9XXXXXXXXX',
-          inputType: TextInputType.phone,
-        ),
-        const SizedBox(height: 14),
-        EditField(
-          icon: Icons.location_on_outlined,
-          label: 'Municipality',
-          controller: municipalityCtrl,
-          hint: 'e.g. Kathmandu Metropolitan',
-          capitalization: TextCapitalization.words,
-        ),
-        const SizedBox(height: 14),
+  Widget build(BuildContext context){
+    final l = AppLocalizations.of(context)!;
 
-        DropdownInputField(
-          hintText: "Select Gender",
-          icon: Icons.wc_rounded,
-          label: "Gender",
-          value: selectedGender,
-          display: (v) => v[0].toUpperCase() + v.substring(1),
-          items: genderOptions,
-          onChanged: onGenderChanged,
-        ),
-        const SizedBox(height: 14),
-        
-        ReadOnlyField(
-          icon: Icons.email_outlined,
-          label: 'Email (read-only)',
-          value: email.isEmpty ? '—' : email,
-          note: 'Email is tied to your auth account',
-        ),
-        const SizedBox(height: 14),
-        // DOB — read-only
-        ReadOnlyField(
-          icon: Icons.cake_outlined,
-          label: 'Date of Birth (read-only)',
-          value: dateOfBirth,
-          note: 'Contact admin to update DOB',
-        ),
-      ],
-    ),
-  );
+     return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          EditField(
+            icon: Icons.badge_outlined,
+            label: '${l.name} *',
+            controller: fullNameCtrl,
+           hint: l.enterFullName,
+            inputType: TextInputType.name,
+            capitalization: TextCapitalization.words,
+          ),
+          const SizedBox(height: 14),
+          EditField(
+            icon: Icons.phone_outlined,
+           label: l.phone,
+            controller: phoneCtrl,
+            hint: '+977 9XXXXXXXXX',
+            inputType: TextInputType.phone,
+          ),
+          const SizedBox(height: 14),
+          EditField(
+            icon: Icons.location_on_outlined,
+label: l.municipality,            controller: municipalityCtrl,
+            hint: 'e.g. Kathmandu Metropolitan',
+            capitalization: TextCapitalization.words,
+          ),
+          const SizedBox(height: 14),
+
+          DropdownInputField(
+            hintText: l.selectGender,
+            icon: Icons.wc_rounded,
+            label: l.gender,
+            value: selectedGender,
+            display: (v) => v[0].toUpperCase() + v.substring(1),
+            items: genderOptions,
+            onChanged: onGenderChanged,
+          ),
+          const SizedBox(height: 14),
+
+          ReadOnlyField(
+            icon: Icons.email_outlined,
+           label: '${l.email} (${l.readOnly})',
+            value: email.isEmpty ? '—' : email,
+           note: l.emailReadOnlyNote,
+          ),
+          const SizedBox(height: 14),
+          // DOB — read-only
+          ReadOnlyField(
+            icon: Icons.cake_outlined,
+           label: '${l.dateOfBirth} (${l.readOnly})',
+            value: dateOfBirth,
+            note: l.dobReadOnlyNote
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _ProfessionalEditForm extends StatelessWidget {
@@ -886,61 +888,65 @@ class _ProfessionalEditForm extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(16),
-    child: Column(
-      children: [
-        EditField(
-          icon: Icons.workspace_premium_outlined,
-          label: 'NMC License Number *',
-          controller: licenseCtrl,
-          hint: 'e.g. 12345',
-          inputType: TextInputType.number,
-        ),
-        const SizedBox(height: 14),
+  Widget build(BuildContext context){
+    final l = AppLocalizations.of(context)!;
+ 
+    return  Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          EditField(
+            icon: Icons.workspace_premium_outlined,
+            label: '${l.nmcLicense} *',
+            controller: licenseCtrl,
+            hint: 'e.g. 12345',
+            inputType: TextInputType.number,
+          ),
+          const SizedBox(height: 14),
 
-        DropdownInputField(
-          icon: Icons.medical_services_outlined,
-          hintText: "select Speciality",
-          label: "Speciality",
-          value: selectedSpecialty,
-          display: (v) => v,
+          DropdownInputField(
+            icon: Icons.medical_services_outlined,
+            hintText: l.selectSpecialty,
+           label: l.specialty,
+            value: selectedSpecialty,
+            display: (v) => v,
 
-          items: specialtyOptions,
-          onChanged: onSpecialtyChanged,
-        ),
-        const SizedBox(height: 14),
-        EditField(
-          icon: Icons.school_outlined,
-          label: 'Qualification',
-          controller: qualificationCtrl,
-          hint: 'e.g. MBBS, MD',
-          capitalization: TextCapitalization.characters,
-        ),
-        const SizedBox(height: 14),
-        EditField(
-          icon: Icons.timer_outlined,
-          label: 'Years of Experience',
-          controller: experienceCtrl,
-          hint: 'e.g. 8',
-          inputType: TextInputType.number,
-        ),
-        const SizedBox(height: 14),
-        EditField(
-          icon: Icons.home_outlined,
-          label: 'Health Post Name',
-          controller: healthpostCtrl,
-          hint: 'e.g. Tokha Health Post',
-          capitalization: TextCapitalization.words,
-        ),
-        const SizedBox(height: 14),
-        ReadOnlyField(
-          icon: Icons.calendar_today_outlined,
-          label: 'Doctor Since (read-only)',
-          value: doctorSince,
-          note: 'Set automatically on registration',
-        ),
-      ],
-    ),
-  );
+            items: specialtyOptions,
+            onChanged: onSpecialtyChanged,
+          ),
+          const SizedBox(height: 14),
+          EditField(
+            icon: Icons.school_outlined,
+            label: l.qualification,
+            controller: qualificationCtrl,
+            hint: 'e.g. MBBS, MD',
+            capitalization: TextCapitalization.characters,
+          ),
+          const SizedBox(height: 14),
+          EditField(
+            icon: Icons.timer_outlined,
+           label: l.experience,
+            controller: experienceCtrl,
+            hint: 'e.g. 8',
+            inputType: TextInputType.number,
+          ),
+          const SizedBox(height: 14),
+          EditField(
+            icon: Icons.home_outlined,
+            label: l.healthPost,
+            controller: healthpostCtrl,
+            hint: 'e.g. Tokha Health Post',
+            capitalization: TextCapitalization.words,
+          ),
+          const SizedBox(height: 14),
+          ReadOnlyField(
+            icon: Icons.calendar_today_outlined,
+            label: '${l.doctorSince} (${l.readOnly})',
+            value: doctorSince,
+           note: l.doctorSinceNote
+          ),
+        ],
+      ),
+    );
+  }
 }

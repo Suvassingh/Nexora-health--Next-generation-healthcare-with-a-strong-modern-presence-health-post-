@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:healthpost_app/appointment_screen.dart';
+import 'package:healthpost_app/l10n/app_localizations.dart';
 import 'package:healthpost_app/models/notification_model.dart';
 import 'package:healthpost_app/services/api_service.dart';
 import 'package:healthpost_app/widgets/home_appointment.dart';
@@ -122,11 +123,12 @@ class _DoctorHomeScreenState extends ConsumerState<DoctorHomeScreen>
 
 
 
-  String _greeting() {
+  String _greeting(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
+    if (hour < 12) return l.goodMorning;
+    if (hour < 17) return l.goodAfternoon;
+    return l.goodEvening;
   }
 
   String _initials(String name) {
@@ -137,34 +139,34 @@ class _DoctorHomeScreenState extends ConsumerState<DoctorHomeScreen>
         : 'D';
   }
 
-  String _todayLabel() {
+  String _todayLabel(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     final d = DateTime.now();
-    const days = [
-      'Monday',
-      'Tuesday',
-      'Wednesday',
-      'Thursday',
-      'Friday',
-      'Saturday',
-      'Sunday',
+    final days = [
+      l.monday,
+      l.tuesday,
+      l.wednesday,
+      l.thursday,
+      l.friday,
+      l.saturday,
+      l.sunday,
     ];
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
+    final months = [
+      l.jan,
+      l.feb,
+      l.mar,
+      l.apr,
+      l.mayShort,
+      l.jun,
+      l.jul,
+      l.aug,
+      l.sep,
+      l.oct,
+      l.nov,
+      l.dec,
     ];
     return '${days[d.weekday - 1]}, ${d.day} ${months[d.month - 1]} ${d.year}';
   }
-
   @override
   Widget build(BuildContext context) {
     final homeAsync = ref.watch(homeDataProvider);
@@ -174,12 +176,8 @@ class _DoctorHomeScreenState extends ConsumerState<DoctorHomeScreen>
       appBar: _buildAppBar(),
       floatingActionButton: homeAsync.whenOrNull(
         data: (data) => VoiceFab(
-          text:
-              '${_greeting()} Dr. ${data.doctorName}. '
-              'Today you have ${data.stats.todayPatients} patients. '
-              '${data.stats.pending} are pending and '
-              '${data.stats.completed} are completed.',
-        ),
+          text: '${_greeting(context)} Dr. ${data.doctorName}. '
+    '${AppLocalizations.of(context)!.voiceSummary(data.stats.todayPatients, data.stats.pending, data.stats.completed)}',)
       ),
       body: homeAsync.when(
         loading: () => const HomeShimmer(),
@@ -272,8 +270,8 @@ class _DoctorHomeScreenState extends ConsumerState<DoctorHomeScreen>
             healthpostName: data.healthpostName,
             avatarUrl: data.avatarUrl,
             initials: _initials(data.doctorName),
-            greeting: _greeting(),
-            todayLabel: _todayLabel(),
+            greeting: _greeting(context),
+            todayLabel: _todayLabel(context),
           ),
           SizedBox(height: 12),
           NoticeStrip(notices: [],),
@@ -308,8 +306,7 @@ class _DoctorHomeScreenState extends ConsumerState<DoctorHomeScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Next patient',
+                          Text(AppLocalizations.of(context)!.nextPatient,
                             style: TextStyle(
                               color: Colors.white60,
                               fontSize: 11,
@@ -342,8 +339,7 @@ class _DoctorHomeScreenState extends ConsumerState<DoctorHomeScreen>
                         color: Colors.white24,
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: const Text(
-                        'Start',
+                      child: Text(AppLocalizations.of(context)!.start,
                         style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w600,
@@ -355,9 +351,9 @@ class _DoctorHomeScreenState extends ConsumerState<DoctorHomeScreen>
               ),
             ),
           const SizedBox(height: 20),
-          _SectionHeader(
-            title: "Today's appointments",
-            actionLabel: 'See all',
+        _SectionHeader(
+            title: AppLocalizations.of(context)!.todaysAppointments,
+            actionLabel: AppLocalizations.of(context)!.seeAll,
             onAction: () {
               Get.to(() => DoctorAppointmentsScreen());
             },
@@ -389,7 +385,7 @@ WeeklyChart(dailyCounts:data.weeklyCount ),
 
           const SizedBox(height: 16),
 
-          const Text("Could not load home"),
+Text(AppLocalizations.of(context)!.couldNotLoadHome),
 
           const SizedBox(height: 8),
 
@@ -401,7 +397,8 @@ WeeklyChart(dailyCounts:data.weeklyCount ),
             onPressed: () {
               ref.invalidate(homeDataProvider);
             },
-            child: const Text("Retry"),
+            child: Text(AppLocalizations.of(context)!.retry),
+
           ),
         ],
       ),
@@ -474,8 +471,7 @@ class _EmptyAppointments extends StatelessWidget {
               color: Colors.grey.shade300,
             ),
             const SizedBox(height: 12),
-            Text(
-              'No appointments today',
+            Text(AppLocalizations.of(context)!.noAppointmentsToday,
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.bold,
@@ -483,8 +479,7 @@ class _EmptyAppointments extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 4),
-            Text(
-              'Your schedule is clear for today',
+            Text(AppLocalizations.of(context)!.scheduleIsClear,
               style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
             ),
           ],

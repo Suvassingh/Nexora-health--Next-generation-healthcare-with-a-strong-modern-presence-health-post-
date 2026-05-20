@@ -6,6 +6,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:healthpost_app/l10n/app_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/api_service.dart';
@@ -211,7 +212,9 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
 
                   // Call type label
                   Text(
-                    widget.isVideo ? 'Incoming Video Call' : 'Incoming Voice Call',
+                    widget.isVideo
+                        ? AppLocalizations.of(context)!.incomingVideoCall
+                        : AppLocalizations.of(context)!.incomingVoiceCall,
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.65),
                       fontSize: 15,
@@ -320,7 +323,9 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          widget.isVideo ? 'Video Call' : 'Voice Call',
+                          widget.isVideo
+                              ? AppLocalizations.of(context)!.videoCall
+                              : AppLocalizations.of(context)!.voiceCall,
                           style: const TextStyle(
                             color: Colors.white70,
                             fontSize: 13,
@@ -342,13 +347,13 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
                       children: [
                         _ActionButton(
                           icon: Icons.call_end,
-                          label: 'Decline',
+                          label: AppLocalizations.of(context)!.decline,
                           color: const Color(0xFFE53935),
                           onTap: _decline,
                         ),
                         _ActionButton(
                           icon: widget.isVideo ? Icons.videocam : Icons.call,
-                          label: 'Accept',
+                          label: AppLocalizations.of(context)!.accept,
                           color: const Color(0xFF43A047),
                           onTap: _accept,
                         ),

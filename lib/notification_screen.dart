@@ -1,6 +1,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:healthpost_app/l10n/app_localizations.dart';
 import 'package:intl/intl.dart';
 
 import 'models/notification_model.dart';
@@ -31,8 +32,7 @@ class _NotificationScreenState extends ConsumerState<NotificationScreen> {
         backgroundColor: AppConstants.primaryColor,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
-        title: const Text(
-          'Notifications',
+        title: Text(AppLocalizations.of(context)!.notifications,
           style: TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
@@ -44,8 +44,7 @@ class _NotificationScreenState extends ConsumerState<NotificationScreen> {
             TextButton(
               onPressed: () =>
                   ref.read(notificationProvider.notifier).markAllRead(),
-              child: const Text(
-                'Mark all read',
+              child: Text(AppLocalizations.of(context)!.markAllRead,
                 style: TextStyle(color: Colors.white70, fontSize: 12),
               ),
             ),
@@ -82,8 +81,7 @@ class _NotificationScreenState extends ConsumerState<NotificationScreen> {
           color: Colors.grey.shade200,
         ),
         const SizedBox(height: 14),
-        Text(
-          'No notifications yet',
+        Text(AppLocalizations.of(context)!.noNotifications,
           style: TextStyle(
             fontSize: 15,
             color: Colors.grey.shade400,

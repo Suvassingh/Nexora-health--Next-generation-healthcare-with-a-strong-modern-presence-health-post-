@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:healthpost_app/app_constants.dart';
 import 'package:healthpost_app/models/doctor_model.dart';
-import 'package:healthpost_app/verified_batch.dart';
+import 'package:healthpost_app/widgets/verified_batch.dart';
 import 'package:healthpost_app/widgets/contact_btn.dart';
 import 'package:healthpost_app/widgets/information_under_pp.dart';
 import 'package:healthpost_app/widgets/profile_pic.dart';
