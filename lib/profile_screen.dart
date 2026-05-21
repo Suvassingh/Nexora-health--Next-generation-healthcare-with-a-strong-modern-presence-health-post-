@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:healthpost_app/controller/locale_conreoller.dart';
 import 'package:healthpost_app/l10n/app_localizations.dart';
+import 'package:healthpost_app/main.dart';
 import 'package:healthpost_app/models/doctor_model.dart';
 import 'package:healthpost_app/providers/profile_providers.dart';
 import 'package:healthpost_app/services/tts_service.dart';
@@ -37,7 +38,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen>
     LocaleController(),
     permanent: true,
   );
-AppLocalizations get _l => AppLocalizations.of(context)!;
+  AppLocalizations get _l => AppLocalizations.of(context)!;
   DoctorProfileModel? doctor;
   bool loading = true;
   String? error;
@@ -56,6 +57,10 @@ AppLocalizations get _l => AppLocalizations.of(context)!;
   late TextEditingController _experienceCtrl;
   late TextEditingController _healthpostCtrl;
   String? _selectedSpecialty;
+  bool get _isNepali =>
+      _localeCtrl.locale == 'np' ||
+      _localeCtrl.locale == 'ne' ||
+      _localeCtrl.locale == 'nepali';
 
   static const List<String> _genderOptions = ['male', 'female', 'other'];
   static const List<String> _specialtyOptions = [
@@ -182,7 +187,7 @@ AppLocalizations get _l => AppLocalizations.of(context)!;
 
   Future<void> _saveProfile() async {
     if (_fullNameCtrl.text.trim().isEmpty) {
-     _showSnack(_l.fullNameRequired, isError: true);
+      _showSnack(_l.fullNameRequired, isError: true);
 
       return;
     }
@@ -229,12 +234,10 @@ AppLocalizations get _l => AppLocalizations.of(context)!;
         _editMode = false;
         _saving = false;
       });
-_showSnack(_l.profileUpdated);
-
+      _showSnack(_l.profileUpdated);
     } catch (e) {
       setState(() => _saving = false);
       _showSnack('${_l.failedToSave}: ${e.toString()}', isError: true);
-
     }
   }
 
@@ -242,6 +245,7 @@ _showSnack(_l.profileUpdated);
     Get.snackbar(
       isError ? _l.error : _l.success,
       msg,
+      snackPosition: SnackPosition.BOTTOM,
       backgroundColor: isError
           ? const Color(0xFFFEF2F2)
           : const Color(0xFFEAF7EF),
@@ -260,6 +264,13 @@ _showSnack(_l.profileUpdated);
 
   Future<void> _saveLanguage(String locale) async {
     _localeCtrl.setLocale(locale);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        HealthpostApp.of(
+          context,
+        )?.changeLanguage(locale == 'np' || locale == 'ne' ? 'ne' : 'en');
+      }
+    });
     try {
       final supabase = Supabase.instance.client;
       final userId = supabase.auth.currentUser?.id;
@@ -268,6 +279,7 @@ _showSnack(_l.profileUpdated);
           .from('user_profiles')
           .update({'preferred_language': locale == 'np' ? 'nepali' : 'english'})
           .eq('id', userId);
+      ref.invalidate(doctorProfileProvider);
     } catch (_) {}
   }
 
@@ -312,13 +324,13 @@ _showSnack(_l.profileUpdated);
     }
   }
 
-  void _speakProfileGreeting(DoctorProfileModel d, String lang) {
-    final isNepali = lang == 'nepali';
-    final text = isNepali
-        ? 'नमस्ते डाक्टर ${d.fullName}। तपाईंको प्रोफाइल लोड भयो।'
-        : 'Hello Dr. ${d.fullName}. Your profile has loaded.';
-    TtsService().speak(text);
-  }
+  // void _speakProfileGreeting(DoctorProfileModel d, String lang) {
+  //   final isNepali = lang == 'nepali';
+  //   final text = isNepali
+  //       ? 'नमस्ते डाक्टर ${d.fullName}। तपाईंको प्रोफाइल लोड भयो।'
+  //       : 'Hello Dr. ${d.fullName}. Your profile has loaded.';
+  //   TtsService().speak(text);
+  // }
 
   String _cap(String? s) {
     if (s == null || s.isEmpty) return '—';
@@ -331,25 +343,35 @@ _showSnack(_l.profileUpdated);
 
   @override
   Widget build(BuildContext context) {
-    final profileAsync = ref.watch(doctorProfileProvider);
+    final profileAsync = ref.watch(
+      doctorProfileProvider.select((value) => value),
+    );
 
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
       appBar: _buildAppBar(),
-      floatingActionButton: (!_editMode && doctor != null)
-          ? VoiceFab(
-        language: doctor!.preferredLanguage == 'nepali' ? 'ne-NP' : 'en-US',
-        text: doctor!.preferredLanguage == 'nepali'
-            ? 'नमस्ते डाक्टर ${doctor!.fullName}। '
-            'तपाईंको विशेषज्ञता ${doctor!.specialty} हो। '
-            'तपाईंसँग ${doctor!.experienceYears ?? 0} वर्षको अनुभव छ। '
-            'तपाईं ${doctor!.healthpostName} मा कार्यरत हुनुहुन्छ।'
-            : 'Hello Dr. ${doctor!.fullName}. '
-            'Specialty: ${doctor!.specialty}. '
-            'Experience: ${doctor!.experienceYears ?? 0} years. '
-            'Health post: ${doctor!.healthpostName}.',
-      )
-          : null,
+      floatingActionButton: Builder(
+        builder: (context) {
+          final profileAsync = ref.watch(doctorProfileProvider);
+          return profileAsync.maybeWhen(
+            data: (data) => !_editMode
+                ? VoiceFab(
+                    language: _isNepali ? 'ne-NP' : 'en-US', // ← use _isNepali
+                    text: _isNepali
+                        ? 'नमस्ते डाक्टर ${data.fullName}। '
+                              'तपाईंको विशेषज्ञता ${data.specialty} हो। '
+                              'तपाईंसँग ${data.experienceYears ?? 0} वर्षको अनुभव छ। '
+                              'तपाईं ${data.healthpostName} मा कार्यरत हुनुहुन्छ।'
+                        : 'Hello Dr. ${data.fullName}. '
+                              'Specialty: ${data.specialty}. '
+                              'Experience: ${data.experienceYears ?? 0} years. '
+                              'Health post: ${data.healthpostName}.',
+                  )
+                : const SizedBox.shrink(),
+            orElse: () => const SizedBox.shrink(),
+          );
+        },
+      ),
       body: profileAsync.when(
         loading: () => const Shimmer(),
         error: (e, _) => ErrorState(
@@ -363,16 +385,20 @@ _showSnack(_l.profileUpdated);
         data: (data) {
           // Sync local state on first load or after refresh
           if (doctor == null || doctor != data) {
-            // Use addPostFrameCallback to avoid setState during build
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted) {
                 setState(() => doctor = data);
+
                 _populateControllers(data);
-                // Handle locale
+
+                // ignore: dead_code
                 final lang = data.preferredLanguage ?? 'english';
+
                 _localeCtrl.setLocale(lang == 'nepali' ? 'np' : 'en');
-                if (!_animController.isCompleted) _animController.forward();
-                _speakProfileGreeting(data, lang);
+
+                if (!_animController.isCompleted) {
+                  _animController.forward();
+                }
               }
             });
           }
@@ -426,41 +452,60 @@ _showSnack(_l.profileUpdated);
         ],
       ),
       actions: [
-        if (!_editMode && doctor != null)
-          // Edit button
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: TextButton.icon(
-              onPressed: _startEdit,
-              icon: const Icon(
-                Icons.edit_outlined,
-                size: 16,
-                color: Colors.white,
-              ),
-              label: Text(_l.edit,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-              style: TextButton.styleFrom(
-                backgroundColor: Colors.white.withOpacity(0.18),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-              ),
-            ),
-          ),
+        // if (!_editMode && doctor != null)
+        //   IconButton(
+        //     icon: const Icon(Icons.volume_up_rounded, color: Colors.white),
+        //     tooltip: 'Read profile aloud',
+        //     onPressed: () {
+        //       final isNepali = (doctor!.preferredLanguage ?? '') == 'nepali';
+        //       final text = isNepali
+        //           ? 'नाम: ${doctor!.fullName}। विशेषज्ञता: ${doctor!.specialty}। '
+        //                 'अनुभव: ${doctor!.experienceYears ?? 0} वर्ष। '
+        //                 'स्वास्थ्य चौकी: ${doctor!.healthpostName}।'
+        //           : 'Name: ${doctor!.fullName}. Specialty: ${doctor!.specialty}. '
+        //                 'Experience: ${doctor!.experienceYears ?? 0} years. '
+        //                 'Health post: ${doctor!.healthpostName}.';
+        //       TtsService().speak(text);
+        //     },
+        //   ),
+
+        // if (!_editMode && doctor != null)
+        //   // Edit button
+        //   Padding(
+        //     padding: const EdgeInsets.only(right: 8),
+        //     child: TextButton.icon(
+        //       onPressed: _startEdit,
+        //       icon: const Icon(
+        //         Icons.edit_outlined,
+        //         size: 16,
+        //         color: Colors.white,
+        //       ),
+        //       label: Text(
+        //         _l.edit,
+        //         style: TextStyle(
+        //           color: Colors.white,
+        //           fontWeight: FontWeight.w600,
+        //           fontSize: 13,
+        //         ),
+        //       ),
+        //       style: TextButton.styleFrom(
+        //         backgroundColor: Colors.white.withOpacity(0.18),
+        //         shape: RoundedRectangleBorder(
+        //           borderRadius: BorderRadius.circular(10),
+        //         ),
+        //         padding: const EdgeInsets.symmetric(
+        //           horizontal: 12,
+        //           vertical: 6,
+        //         ),
+        //       ),
+        //     ),
+        //   ),
         if (_editMode) ...[
           // Cancel
           TextButton(
             onPressed: _saving ? null : _cancelEdit,
-            child: Text(_l.back,
+            child: Text(
+              _l.back,
               style: TextStyle(
                 color: Colors.white70,
                 fontWeight: FontWeight.w600,
@@ -490,7 +535,8 @@ _showSnack(_l.profileUpdated);
                       size: 16,
                       color: Colors.white,
                     ),
-                    label: Text(_l.save,
+                    label: Text(
+                      _l.save,
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
@@ -514,7 +560,7 @@ _showSnack(_l.profileUpdated);
             tooltip: 'Read profile aloud',
             onPressed: () {
               if (doctor == null) return;
-              final isNepali = (doctor!.preferredLanguage ?? '') == 'nepali';
+              final isNepali = _isNepali;
               final text = isNepali
                   ? 'नाम: ${doctor!.fullName}। '
                         'विशेषज्ञता: ${doctor!.specialty}। '
@@ -551,8 +597,9 @@ _showSnack(_l.profileUpdated);
                     color: Color(0xFFF39C12),
                   ),
                   const SizedBox(width: 8),
-                   Expanded(
-                    child:Text(_l.editModeHint,
+                  Expanded(
+                    child: Text(
+                      _l.editModeHint,
                       style: TextStyle(
                         fontSize: 12,
                         color: Color(0xFFA06000),
@@ -598,17 +645,17 @@ _showSnack(_l.profileUpdated);
                   rows: [
                     IR(
                       Icons.badge_outlined,
-                     _l.name,
+                      _l.name,
                       d.fullName.isEmpty ? '—' : d.fullName,
                     ),
                     IR(
                       Icons.phone_outlined,
-                     _l.phone,
+                      _l.phone,
                       d.phone.isEmpty ? '—' : d.phone,
                     ),
                     IR(
                       Icons.email_outlined,
-                    _l.email,
+                      _l.email,
                       d.email.isEmpty ? '—' : d.email,
                     ),
                     IR(Icons.wc_rounded, _l.gender, _cap(d.gender)),
@@ -619,7 +666,7 @@ _showSnack(_l.profileUpdated);
                     ),
                     IR(
                       Icons.location_on_outlined,
-                     _l.municipality,
+                      _l.municipality,
                       d.municipality ?? '—',
                     ),
                   ],
@@ -629,7 +676,7 @@ _showSnack(_l.profileUpdated);
           _editMode
               ? EditSection(
                   sectionIcon: Icons.local_hospital_outlined,
-                  title: _l.personalDetails,
+                  title: _l.professionalDetails,
                   child: _ProfessionalEditForm(
                     licenseCtrl: _licenseCtrl,
                     qualificationCtrl: _qualificationCtrl,
@@ -648,24 +695,24 @@ _showSnack(_l.profileUpdated);
                   rows: [
                     IR(
                       Icons.workspace_premium_outlined,
-                     _l.nmcLicense,
+                      _l.nmcLicense,
                       d.licenseNumber.isEmpty ? '—' : d.licenseNumber,
                     ),
                     IR(
                       Icons.medical_services_outlined,
-                    _l.specialty,
+                      _l.specialty,
                       d.specialty.isEmpty ? '—' : d.specialty,
                     ),
                     IR(
                       Icons.school_outlined,
-                     _l.qualification,
+                      _l.qualification,
                       d.qualification.isEmpty ? '—' : d.qualification,
                     ),
                     IR(
                       Icons.timer_outlined,
-                     _l.experience,
+                      _l.experience,
                       d.experienceYears != null
-                          ? '${d.experienceYears} years'
+                          ? '${d.experienceYears} ${_l.years}'
                           : '—',
                     ),
                     IR(
@@ -675,7 +722,7 @@ _showSnack(_l.profileUpdated);
                     ),
                     IR(
                       Icons.calendar_today_outlined,
-                    _l.doctorSince,
+                      _l.doctorSince,
                       _fmtDate(d.doctorSince),
                     ),
                   ],
@@ -747,7 +794,8 @@ class EditSection extends StatelessWidget {
                     color: const Color(0xFFF39C12).withOpacity(0.4),
                   ),
                 ),
-                child: Text(AppLocalizations.of(context)!.editing,
+                child: Text(
+                  AppLocalizations.of(context)!.editing,
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
@@ -803,10 +851,10 @@ class _PersonalEditForm extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context){
+  Widget build(BuildContext context) {
     final l = AppLocalizations.of(context)!;
 
-     return Padding(
+    return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
@@ -814,14 +862,14 @@ class _PersonalEditForm extends StatelessWidget {
             icon: Icons.badge_outlined,
             label: '${l.name} *',
             controller: fullNameCtrl,
-           hint: l.enterFullName,
+            hint: l.enterFullName,
             inputType: TextInputType.name,
             capitalization: TextCapitalization.words,
           ),
           const SizedBox(height: 14),
           EditField(
             icon: Icons.phone_outlined,
-           label: l.phone,
+            label: l.phone,
             controller: phoneCtrl,
             hint: '+977 9XXXXXXXXX',
             inputType: TextInputType.phone,
@@ -829,7 +877,8 @@ class _PersonalEditForm extends StatelessWidget {
           const SizedBox(height: 14),
           EditField(
             icon: Icons.location_on_outlined,
-label: l.municipality,            controller: municipalityCtrl,
+            label: l.municipality,
+            controller: municipalityCtrl,
             hint: 'e.g. Kathmandu Metropolitan',
             capitalization: TextCapitalization.words,
           ),
@@ -848,17 +897,17 @@ label: l.municipality,            controller: municipalityCtrl,
 
           ReadOnlyField(
             icon: Icons.email_outlined,
-           label: '${l.email} (${l.readOnly})',
+            label: '${l.email} (${l.readOnly})',
             value: email.isEmpty ? '—' : email,
-           note: l.emailReadOnlyNote,
+            note: l.emailReadOnlyNote,
           ),
           const SizedBox(height: 14),
           // DOB — read-only
           ReadOnlyField(
             icon: Icons.cake_outlined,
-           label: '${l.dateOfBirth} (${l.readOnly})',
+            label: '${l.dateOfBirth} (${l.readOnly})',
             value: dateOfBirth,
-            note: l.dobReadOnlyNote
+            note: l.dobReadOnlyNote,
           ),
         ],
       ),
@@ -888,10 +937,10 @@ class _ProfessionalEditForm extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context){
+  Widget build(BuildContext context) {
     final l = AppLocalizations.of(context)!;
- 
-    return  Padding(
+
+    return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
@@ -907,7 +956,7 @@ class _ProfessionalEditForm extends StatelessWidget {
           DropdownInputField(
             icon: Icons.medical_services_outlined,
             hintText: l.selectSpecialty,
-           label: l.specialty,
+            label: l.specialty,
             value: selectedSpecialty,
             display: (v) => v,
 
@@ -925,7 +974,7 @@ class _ProfessionalEditForm extends StatelessWidget {
           const SizedBox(height: 14),
           EditField(
             icon: Icons.timer_outlined,
-           label: l.experience,
+            label: l.experience,
             controller: experienceCtrl,
             hint: 'e.g. 8',
             inputType: TextInputType.number,
@@ -943,7 +992,7 @@ class _ProfessionalEditForm extends StatelessWidget {
             icon: Icons.calendar_today_outlined,
             label: '${l.doctorSince} (${l.readOnly})',
             value: doctorSince,
-           note: l.doctorSinceNote
+            note: l.doctorSinceNote,
           ),
         ],
       ),

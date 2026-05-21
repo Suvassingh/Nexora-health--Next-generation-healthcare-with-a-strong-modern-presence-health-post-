@@ -252,7 +252,10 @@ class _DoctorHomeScreenState extends ConsumerState<DoctorHomeScreen>
             );
           return const SizedBox.shrink();
         }),
-        IconButton(onPressed: () {}, icon: const LanguageToggleButton()),
+        // IconButton(onPressed: () {}, icon: const LanguageToggleButton()),
+                const SizedBox(width: 4),
+
+        const LanguageToggleButton(),
         const SizedBox(width: 4),
       ],
     );

@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:get/get.dart';
 import 'package:healthpost_app/l10n/app_localizations.dart';
-import 'package:healthpost_app/services/selected_patient_provider.dart';
+import 'package:healthpost_app/providers/selected_patient_provider.dart';
 import '../app_constants.dart';
-import '../services/patient_health_provider.dart'; 
+import 'providers/patient_health_provider.dart'; 
 import 'patient_health_record_screen.dart'; 
 
 class DoctorPatientListScreen extends ConsumerWidget {
