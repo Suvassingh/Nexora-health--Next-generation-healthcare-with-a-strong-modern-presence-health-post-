@@ -1,21 +1,16 @@
-import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:healthpost_app/appointment_screen.dart';
 import 'package:healthpost_app/l10n/app_localizations.dart';
-import 'package:healthpost_app/models/notification_model.dart';
-import 'package:healthpost_app/services/api_service.dart';
 import 'package:healthpost_app/widgets/home_appointment.dart';
 import 'package:healthpost_app/widgets/home_hero_header.dart';
 import 'package:healthpost_app/widgets/home_simmer.dart';
 import 'package:healthpost_app/widgets/home_stat.dart';
 import 'package:healthpost_app/widgets/notice_stripe.dart';
 import 'package:healthpost_app/widgets/recent_patient_row.dart';
-import 'package:healthpost_app/widgets/voice_fab.dart';
 import 'package:healthpost_app/widgets/weekly_chart.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:healthpost_app/app_constants.dart';
 import 'package:healthpost_app/widgets/connectivity_icon.dart';
 import 'package:healthpost_app/widgets/language_toggle_button.dart';
@@ -174,11 +169,7 @@ class _DoctorHomeScreenState extends ConsumerState<DoctorHomeScreen>
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
       appBar: _buildAppBar(),
-      floatingActionButton: homeAsync.whenOrNull(
-        data: (data) => VoiceFab(
-          text: '${_greeting(context)} Dr. ${data.doctorName}. '
-    '${AppLocalizations.of(context)!.voiceSummary(data.stats.todayPatients, data.stats.pending, data.stats.completed)}',)
-      ),
+
       body: homeAsync.when(
         loading: () => const HomeShimmer(),
 
@@ -252,7 +243,6 @@ class _DoctorHomeScreenState extends ConsumerState<DoctorHomeScreen>
             );
           return const SizedBox.shrink();
         }),
-        // IconButton(onPressed: () {}, icon: const LanguageToggleButton()),
                 const SizedBox(width: 4),
 
         const LanguageToggleButton(),

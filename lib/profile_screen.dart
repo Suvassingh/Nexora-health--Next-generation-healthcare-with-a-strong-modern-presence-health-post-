@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:healthpost_app/controller/locale_conreoller.dart';
+import 'package:healthpost_app/controller/profile_controller.dart';
 import 'package:healthpost_app/l10n/app_localizations.dart';
 import 'package:healthpost_app/main.dart';
 import 'package:healthpost_app/models/doctor_model.dart';
@@ -18,7 +19,6 @@ import 'package:healthpost_app/widgets/read_only_field.dart';
 import 'package:healthpost_app/widgets/settings.dart';
 import 'package:healthpost_app/widgets/shimmer_anim.dart';
 import 'package:healthpost_app/widgets/start_stripe.dart';
-import 'package:healthpost_app/widgets/voice_fab.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:healthpost_app/app_constants.dart';
 import 'package:healthpost_app/login_screen.dart';
@@ -283,14 +283,24 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen>
     } catch (_) {}
   }
 
-  Future<void> _logout() async {
-    final ok = await showDialog<bool>(
+Future<void> _logout() async {
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => const LogoutDialog(),
     );
-    if (ok == true) {
-      await supabase.auth.signOut();
+    if (confirmed != true) return;
+
+    setState(() => _saving = true); 
+
+    try {
+      final service = DoctorService();
+      await service.signOut();
+      TtsService().stop();
       Get.offAll(() => LoginScreen());
+    } catch (e) {
+      Get.offAll(() => LoginScreen());
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -350,28 +360,28 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen>
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
       appBar: _buildAppBar(),
-      floatingActionButton: Builder(
-        builder: (context) {
-          final profileAsync = ref.watch(doctorProfileProvider);
-          return profileAsync.maybeWhen(
-            data: (data) => !_editMode
-                ? VoiceFab(
-                    language: _isNepali ? 'ne-NP' : 'en-US', // ← use _isNepali
-                    text: _isNepali
-                        ? 'नमस्ते डाक्टर ${data.fullName}। '
-                              'तपाईंको विशेषज्ञता ${data.specialty} हो। '
-                              'तपाईंसँग ${data.experienceYears ?? 0} वर्षको अनुभव छ। '
-                              'तपाईं ${data.healthpostName} मा कार्यरत हुनुहुन्छ।'
-                        : 'Hello Dr. ${data.fullName}. '
-                              'Specialty: ${data.specialty}. '
-                              'Experience: ${data.experienceYears ?? 0} years. '
-                              'Health post: ${data.healthpostName}.',
-                  )
-                : const SizedBox.shrink(),
-            orElse: () => const SizedBox.shrink(),
-          );
-        },
-      ),
+      // floatingActionButton: Builder(
+      //   builder: (context) {
+      //     final profileAsync = ref.watch(doctorProfileProvider);
+      //     return profileAsync.maybeWhen(
+      //       data: (data) => !_editMode
+      //           ? VoiceFab(
+      //               language: _isNepali ? 'ne-NP' : 'en-US', // ← use _isNepali
+      //               text: _isNepali
+      //                   ? 'नमस्ते डाक्टर ${data.fullName}। '
+      //                         'तपाईंको विशेषज्ञता ${data.specialty} हो। '
+      //                         'तपाईंसँग ${data.experienceYears ?? 0} वर्षको अनुभव छ। '
+      //                         'तपाईं ${data.healthpostName} मा कार्यरत हुनुहुन्छ।'
+      //                   : 'Hello Dr. ${data.fullName}. '
+      //                         'Specialty: ${data.specialty}. '
+      //                         'Experience: ${data.experienceYears ?? 0} years. '
+      //                         'Health post: ${data.healthpostName}.',
+      //             )
+      //           : const SizedBox.shrink(),
+      //       orElse: () => const SizedBox.shrink(),
+      //     );
+      //   },
+      // ),
       body: profileAsync.when(
         loading: () => const Shimmer(),
         error: (e, _) => ErrorState(
@@ -383,7 +393,6 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen>
           },
         ),
         data: (data) {
-          // Sync local state on first load or after refresh
           if (doctor == null || doctor != data) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted) {

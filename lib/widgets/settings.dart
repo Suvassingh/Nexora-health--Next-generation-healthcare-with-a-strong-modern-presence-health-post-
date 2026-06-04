@@ -154,6 +154,21 @@ class SettingsCard extends StatelessWidget {
                 ),
 
                 _div(),
+                /// Medical History
+                STile(
+                  icon: Icons.medical_information,
+                  iconBg: const Color(0xFFEAF7EF),
+                  iconColor: const Color(0xFF27AE60),
+                  label: l.medicalHistory,
+                  sub: l.appVersion,
+                  trailing: const Icon(
+                    Icons.chevron_right_rounded,
+                    size: 20,
+                    color: Color(0xFFCBD5E1),
+                  ),
+                  onTap: () => Get.to(() => DoctorPatientListScreen()),
+                ),
+                _div(),
 
                 /// About App
                 STile(
@@ -167,10 +182,37 @@ class SettingsCard extends StatelessWidget {
                     size: 20,
                     color: Color(0xFFCBD5E1),
                   ),
-                  onTap: () => Get.to(() => DoctorPatientListScreen()),
+                onTap: () {
+                    Get.dialog(
+                      AlertDialog(
+                        title: const Text('About this app'),
+                        content: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('HealthPost Referral System'),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Version: ${l.appVersion}',
+                            ), // or use a hardcoded string
+                            const SizedBox(height: 8),
+                            const Text('© 2025 Ministry of Health, Nepal'),
+                            const SizedBox(height: 8),
+                            const Text('For internal use only.'),
+                          ],
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Get.back(),
+                            child: const Text('OK'),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
-
                 _div(),
+
 
                 /// Logout
                 STile(

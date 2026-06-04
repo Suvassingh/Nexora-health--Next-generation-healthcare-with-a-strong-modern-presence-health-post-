@@ -1,31 +1,49 @@
-
+ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get/get.dart';
+import 'package:healthpost_app/app_constants.dart';
 import 'package:healthpost_app/l10n/app_localizations.dart';
-import 'package:healthpost_app/models/doctor_appointment.dart';
 import 'package:healthpost_app/services/encryption_service.dart';
+import 'package:healthpost_app/services/media_download_service.dart';
+import 'package:healthpost_app/services/presence_service.dart';
+import 'package:healthpost_app/widgets/media_preview_dilog.dart';
+import 'package:healthpost_app/widgets/message_bubble.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:video_player/video_player.dart';
+import 'package:uuid/uuid.dart';
+import 'package:share_plus/share_plus.dart';
 
 class ChatScreen extends StatefulWidget {
-  final DAppt appt;
-  const ChatScreen({super.key, required this.appt});
+  final String conversationId;
+  final String partnerId;          
+  final String partnerName;        
+  final String? partnerAvatarUrl;
+  final bool canSendMessages;
+
+  const ChatScreen({
+    super.key,
+    required this.conversationId,
+    required this.partnerId,
+    required this.partnerName,
+    this.partnerAvatarUrl,
+    required this.canSendMessages,
+  });
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final _supabase = Supabase.instance.client;
   final _secureStorage = const FlutterSecureStorage();
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
   final _picker = ImagePicker();
+  final _uuid = const Uuid();
 
   List<Map<String, dynamic>> _messages = [];
   String? _conversationId;
@@ -33,158 +51,180 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _loading = true;
   bool _sending = false;
   RealtimeChannel? _channel;
+  RealtimeChannel? _typingChannel;
   String? _currentUserPrivateKeyPem;
 
+  bool _isLoadingMore = false;
+  bool _hasMore = true;
+  static const int _pageSize = 20;
+  DateTime? _oldestTimestamp;
+
+  bool _partnerTyping = false;
+  Timer? _typingTimer;
+  bool _iAmTyping = false;
+
+  final Map<String, List<Map<String, dynamic>>> _reactions = {};
+
   String get _currentUserId => _supabase.auth.currentUser!.id;
-  String get _patientId => widget.appt.patientId;
+  String get _partnerId => widget.partnerId;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _conversationId = widget.conversationId;
     _initializeChat();
   }
 
   @override
-  @override
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
-
-    if (_channel != null) {
-      _supabase.removeChannel(_channel!);
-    }
-
+    _channel?.unsubscribe();
+    _typingChannel?.unsubscribe();
+    _typingTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      PresenceService.startHeartbeat();
+    } else if (state == AppLifecycleState.paused) {
+      PresenceService.stopHeartbeat();
+      PresenceService.setOffline();
+    }
+  }
+// In _ChatScreenState
 
-  Future<void> _initializeChat() async {
+  Future<void> _pickAndSendImages() async {
+    final List<XFile> images = await _picker.pickMultiImage();
+    for (final img in images) {
+      _showMediaPreview(File(img.path), 'image');
+    }
+  }
+
+  Future<void> _pickAndSendVideo() async {
+    final XFile? file = await _picker.pickVideo(source: ImageSource.gallery);
+    if (file != null) {
+      _showMediaPreview(File(file.path), 'video');
+    }
+  }
+
+  void _showMediaPreview(File file, String mediaType) {
+    showDialog(
+      context: context,
+      builder: (_) => MediaPreviewDialog(
+        file: file,
+        mediaType: mediaType,
+        onConfirm: () => _uploadAndSendMedia(file, mediaType),
+      ),
+    );
+  }
+Future<void> _initializeChat() async {
     if (!mounted) return;
-      final l = AppLocalizations.of(context)!; 
     setState(() => _loading = true);
     try {
+      print('1. Start init');
+      if (_conversationId == null || _conversationId!.isEmpty) {
+        print('2. No conversation ID, creating...');
+        await _ensureConversationExists();
+        print('3. Conversation ID now: $_conversationId');
+      }
+      print('4. Ensuring user key pair...');
       await _ensureUserKeyPair();
-      _conversationId = await _getOrCreateConversation();
+      print('5. Fetching AES key...');
       await _fetchAndDecryptAESKey();
-      await _loadMessages();
-      _subscribeToMessages();
+      print('6. Loading messages...');
+      await _loadMessages(initial: true);
+      print('7. Setting up realtime...');
+      _setupRealtime();
+      _setupTypingIndicator();
+      await _markMessagesRead();
+      print('8. Init complete');
     } catch (e) {
-     if(mounted){
-       Get.snackbar('Error', e.toString());
-     }
+      print('Error in _initializeChat: $e');
+      if (mounted) {
+        Get.snackbar('Error', e.toString());
+      }
     } finally {
-      if(mounted){
+      if (mounted) {
         setState(() => _loading = false);
       }
     }
   }
 
-
-
+  //  Key management 
   Future<void> _ensureUserKeyPair() async {
     final profile = await _supabase
         .from('user_profiles')
         .select('public_key')
         .eq('id', _currentUserId)
         .maybeSingle();
-
-    if (profile == null || profile['public_key'] == null) {
+    final stored = await _secureStorage.read(key: 'rsa_private_key_$_currentUserId');
+    final privIsOld = stored != null && !_isValidKeyFormat(stored);
+    final pubIsOld = profile != null &&
+        profile['public_key'] != null &&
+        !_isValidKeyFormat(profile['public_key'] as String);
+    if (stored == null ||
+        profile == null ||
+        profile['public_key'] == null ||
+        privIsOld ||
+        pubIsOld) {
       await _generateAndSaveKeyPair();
     } else {
-      _currentUserPrivateKeyPem = await _secureStorage.read(
-        key: 'rsa_private_key_$_currentUserId',
-      );
-      if (_currentUserPrivateKeyPem == null) {
-        await _generateAndSaveKeyPair();
+      _currentUserPrivateKeyPem = stored;
+    }
+  }
+
+  bool _isValidKeyFormat(String pem) {
+    try {
+      final bytes = base64Decode(pem);
+      final decoded = utf8.decode(bytes);
+      if (decoded.startsWith('{')) {
+        final map = jsonDecode(decoded) as Map;
+        return map.containsKey('n') && map.containsKey('e');
       }
+      return false;
+    } catch (_) {
+      return false;
     }
   }
 
   Future<void> _generateAndSaveKeyPair() async {
-    final keyPair = EncryptionService.generateRSAKeyPair();
-    final pubPem = EncryptionService.publicKeyToPem(keyPair.publicKey);
-    final privPem = EncryptionService.privateKeyToPem(keyPair.privateKey);
-
-    await _secureStorage.write(
-      key: 'rsa_private_key_$_currentUserId',
-      value: privPem,
-    );
-    await _supabase
-        .from('user_profiles')
-        .update({'public_key': pubPem})
-        .eq('id', _currentUserId);
-
-    _currentUserPrivateKeyPem = privPem;
+    final kp = EncryptionService.generateRSAKeyPair();
+    final pub = EncryptionService.publicKeyToPem(kp.publicKey);
+    final priv = EncryptionService.privateKeyToPem(kp.privateKey);
+    await _secureStorage.write(key: 'rsa_private_key_$_currentUserId', value: priv);
+    await _supabase.from('user_profiles').update({'public_key': pub}).eq('id', _currentUserId);
+    _currentUserPrivateKeyPem = priv;
   }
 
-  //  CONVERSATION MANAGEMENT - Each doctor-patient pair has a single conversation. The AES key for that conversation is generated by the first one to create it, encrypted with both parties' RSA public keys, and stored in the conversation record for secure retrieval.
 
-  Future<String> _getOrCreateConversation() async {
-   
-    final existing = await _supabase
-        .from('conversations')
-        .select('id')
-        .eq('patient_id', _patientId)
-        .eq('doctor_id', _currentUserId)
-        .maybeSingle();
 
-    if (existing != null) return existing['id'] as String;
-
-    // Fetch both public keys
-    final rows = await _supabase
-        .from('user_profiles')
-        .select('id, public_key')
-        .inFilter('id', [_currentUserId, _patientId]);
-
-    final Map<String, String> pubKeys = {
-      for (final r in rows) r['id'] as String: r['public_key'] as String,
-    };
-
-    if (pubKeys[_patientId] == null) {
+Future<void> _fetchAndDecryptAESKey() async {
+    if (_conversationId == null || _conversationId!.isEmpty) {
+      throw Exception('No conversation ID available');
+    }
+    if (_currentUserPrivateKeyPem == null) {
       throw Exception(
-        'Patient has not set up encryption yet. Ask them to open the app first.',
+        'Your encryption key is missing. Please restart the app.',
       );
     }
-    if (pubKeys[_currentUserId] == null) {
-      throw Exception('Your public key is missing. Please restart the app.');
-    }
 
-    final aesKey = EncryptionService.generateAESKey();
-    final aesB64 = aesKey.base64;
-
-    final encForPatient = EncryptionService.encryptWithRSA(
-      aesB64,
-      EncryptionService.parsePublicKeyFromPem(pubKeys[_patientId]!),
-    );
-    final encForDoctor = EncryptionService.encryptWithRSA(
-      aesB64,
-      EncryptionService.parsePublicKeyFromPem(pubKeys[_currentUserId]!),
-    );
-
-    final response = await _supabase
-        .from('conversations')
-        .insert({
-          'patient_id': _patientId,
-          'doctor_id': _currentUserId,
-          'aes_key_encrypted_for_patient': encForPatient,
-          'aes_key_encrypted_for_doctor': encForDoctor,
-        })
-        .select('id')
-        .single();
-
-    return response['id'] as String;
-  }
-
-  //  AES KEY MANAGEMENT - The AES key for the conversation is fetched and decrypted with the doctor's RSA private key on initialization, allowing for secure end-to-end encryption of messages without exposing the AES key to the server.
-  Future<void> _fetchAndDecryptAESKey() async {
     final conv = await _supabase
         .from('conversations')
         .select('aes_key_encrypted_for_doctor')
         .eq('id', _conversationId!)
-        .single();
+        .maybeSingle();
 
-    final encKey = conv['aes_key_encrypted_for_doctor'] as String?;
-    if (encKey == null) throw Exception('No AES key found in conversation');
+    String? encKey = conv?['aes_key_encrypted_for_doctor'] as String?;
+    if (encKey == null) {
+      throw Exception(
+        'AES key not found for this conversation. Please contact support.',
+      );
+    }
 
     final privKey = EncryptionService.parsePrivateKeyFromPem(
       _currentUserPrivateKeyPem!,
@@ -192,28 +232,17 @@ class _ChatScreenState extends State<ChatScreen> {
     String aesB64;
     try {
       aesB64 = EncryptionService.decryptWithRSA(encKey, privKey);
+      if (!_isValidBase64(aesB64)) throw Exception('Invalid AES key format');
     } catch (e) {
-      debugPrint('RSA decryption failed: $e');
-      await _recreateConversation();
-      return;
+      // Decryption failed – do NOT delete or regenerate keys.
+      throw Exception(
+        'Unable to decrypt conversation. Your chat history is preserved, but you cannot send messages. Please start a new conversation.',
+      );
     }
-
-    if (!_isValidBase64(aesB64)) {
-      debugPrint('Invalid AES key base64: "$aesB64"');
-      await _recreateConversation();
-      return;
-    }
-
     _aesKey = encrypt.Key.fromBase64(aesB64);
   }
 
-  Future<void> _recreateConversation() async {
-    debugPrint('Recreating conversation due to key mismatch');
-    await _supabase.from('conversations').delete().eq('id', _conversationId!);
-    _conversationId = await _getOrCreateConversation();
-    await _fetchAndDecryptAESKey(); // retry
-  }
-  
+
   bool _isValidBase64(String str) {
     try {
       base64Decode(str);
@@ -222,54 +251,80 @@ class _ChatScreenState extends State<ChatScreen> {
       return false;
     }
   }
-  //  MESSAGES - Messages are encrypted with AES before sending and decrypted on receipt. Media messages are supported by uploading files to Supabase Storage and sending the URL in the message record. Realtime updates are handled via Supabase's Realtime channels, with optimistic UI updates for a responsive experience.
 
-  Future<void> _loadMessages() async {
-    final data = await _supabase
-        .from('messages')
-        .select()
-        .eq('conversation_id', _conversationId!)
-        .order('created_at', ascending: true);
-    if (!mounted) return;
-    setState(() => _messages = data.map(_decodeMessage).toList());
-    _scrollToBottom();
-  }
-void _subscribeToMessages() {
-    final channelName = 'messages:${_conversationId!}:$_currentUserId';
 
-    _channel = _supabase
-        .channel(channelName)
-        .onPostgresChanges(
-          event: PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'messages',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'conversation_id',
-            value: _conversationId!,
-          ),
-          callback: (payload) {
-            final newRecord = payload.newRecord;
+  //  Messages with pagination 
+Future<void> _loadMessages({required bool initial}) async {
+    if (!initial && (_isLoadingMore || !_hasMore)) return;
+    if (!initial && mounted) setState(() => _isLoadingMore = true);
 
-            final alreadyExists = _messages.any(
-              (m) => m['id'] != null && m['id'] == newRecord['id'],
-            );
-            if (alreadyExists) return;
-            if (!mounted) return;
-            final decoded = _decodeMessage(newRecord);
-            setState(() => _messages.add(decoded));
+    try {
+      var query = _supabase
+          .from('messages')
+          .select()
+          .eq('conversation_id', _conversationId!);
+
+      if (!initial && _oldestTimestamp != null) {
+        query = query.lt(
+          'created_at',
+          _oldestTimestamp!.toUtc().toIso8601String(),
+        );
+      }
+
+      final data = await query
+          .order('created_at', ascending: false)
+          .limit(_pageSize);
+
+      if (data.length < _pageSize) _hasMore = false;
+      if (data.isNotEmpty) {
+        _oldestTimestamp = DateTime.parse(data.last['created_at'] as String);
+      }
+
+      final decoded = data.map(_decodeMessage).toList().reversed.toList();
+
+      if (mounted) {
+        setState(() {
+          if (initial) {
+            _messages = decoded;
             _scrollToBottom();
-          },
-        )
-        .subscribe((status, [error]) {
-          debugPrint('Realtime status: $status, error: $error');
+          } else {
+            _messages.insertAll(0, decoded);
+          }
+          _isLoadingMore = false;
         });
+      }
+
+      _loadReactions();
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingMore = false);
+      rethrow;
+    }
   }
 
+Future<void> _loadReactions() async {
+    if (!mounted) return;
+    final ids = _messages
+        .map((m) => m['id'] as String)
+        .where((id) => id.isNotEmpty)
+        .toList();
+    if (ids.isEmpty) return;
+    final data = await _supabase
+        .from('message_reactions')
+        .select()
+        .inFilter('message_id', ids);
+    final map = <String, List<Map<String, dynamic>>>{};
+    for (final r in data) {
+      final mid = r['message_id'] as String;
+      map.putIfAbsent(mid, () => []).add(r);
+    }
+    if (mounted) {
+      setState(() => _reactions.addAll(map));
+    }
+  }
 
   Map<String, dynamic> _decodeMessage(Map<String, dynamic> msg) {
     if (msg['is_key_exchange'] == true) {
-      return {...msg, 'decrypted_content': ' Secure session established'};
+      return {...msg, 'decrypted_content': 'Secure session established'};
     }
     if (msg['media_url'] != null) {
       return {...msg, 'decrypted_content': null};
@@ -286,6 +341,104 @@ void _subscribeToMessages() {
     }
   }
 
+  //  Realtime 
+  void _setupRealtime() {
+    _channel = _supabase
+        .channel('msgs:${_conversationId!}:$_currentUserId')
+    // Listen for INSERT (new messages)
+        .onPostgresChanges(
+      event: PostgresChangeEvent.insert,
+      schema: 'public',
+      table: 'messages',
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'conversation_id',
+        value: _conversationId!,
+      ),
+  callback: (payload) {
+            final newRec = payload.newRecord;
+            if (_messages.any(
+              (m) => m['id'] != null && m['id'] == newRec['id'],
+            ))
+              return;
+            final decoded = _decodeMessage(newRec);
+            if (mounted) {
+              setState(() => _messages.add(decoded));
+              _scrollToBottom();
+              _markMessagesDelivered();
+            }
+          }
+    )
+    // Listen for UPDATE (status changes: delivered, seen)
+        .onPostgresChanges(
+      event: PostgresChangeEvent.update,
+      schema: 'public',
+      table: 'messages',
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'conversation_id',
+        value: _conversationId!,
+      ),
+      callback: (payload) {
+        final updated = payload.newRecord;
+        final msgId = updated['id'] as String;
+        final index = _messages.indexWhere((m) => m['id'] == msgId);
+        if (index != -1) {
+          setState(() {
+            _messages[index]['status'] = updated['status'];
+          });
+        }
+      },
+    )
+        .subscribe();
+  }
+
+  void _setupTypingIndicator() {
+    if (_conversationId == null) return;
+    _typingChannel = _supabase.channel('typing:${_conversationId!}');
+
+_typingChannel!.onPresenceSync((_) {
+      if (!mounted) return;
+      final state = _typingChannel!.presenceState();
+      bool typing = false;
+      for (final client in state) {
+        for (final presence in client.presences) {
+          if (presence.payload['user_id'] != _currentUserId &&
+              presence.payload['typing'] == true) {
+            typing = true;
+            break;
+          }
+        }
+      }
+      if (mounted) setState(() => _partnerTyping = typing);
+    }).subscribe();
+  }
+
+  void _updateTyping(bool typing) {
+    _typingChannel?.track({'typing': typing, 'user_id': _currentUserId});
+  }
+
+  //  Read receipts 
+  Future<void> _markMessagesRead() async {
+    try {
+      await _supabase
+          .from('messages')
+          .update({'status': 'seen'})
+          .eq('conversation_id', _conversationId!)
+          .neq('sender_id', _currentUserId)
+          .inFilter('status', ['sent', 'delivered']); // only update if not already read
+    } catch (_) {}
+  }
+
+  Future<void> _markMessagesDelivered() async {
+    try {
+      await _supabase.from('messages').update({'status': 'delivered'})
+          .eq('conversation_id', _conversationId!)
+          .neq('sender_id', _currentUserId)
+          .eq('status', 'sent');
+    } catch (_) {}
+  }
+
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
@@ -298,16 +451,17 @@ void _subscribeToMessages() {
     });
   }
 
-  //  SEND MESSAGE - Handles the process of sending an encrypted message, including optimistic UI updates.
-Future<void> _sendMessage() async {
+  //  Sending 
+  Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
     if (text.isEmpty || _aesKey == null) return;
     _messageController.clear();
+    _updateTyping(false);
 
     final enc = EncryptionService.encryptWithAES(text, _aesKey!);
-
-    // Add optimistically
-    final tempMsg = {
+    final tempId = _uuid.v4();
+    final temp = {
+      'localId': tempId,
       'id': null,
       'conversation_id': _conversationId,
       'sender_id': _currentUserId,
@@ -316,143 +470,341 @@ Future<void> _sendMessage() async {
       'media_url': null,
       'media_type': null,
       'is_key_exchange': false,
+      'status': 'sending',
       'created_at': DateTime.now().toUtc().toIso8601String(),
       'decrypted_content': text,
     };
-    if (mounted) {
-      setState(() => _messages.add(tempMsg));
+    setState(() => _messages.add(temp));
+    _scrollToBottom();
+    try {
+      final inserted = await _supabase.from('messages').insert({
+        'conversation_id': _conversationId,
+        'sender_id': _currentUserId,
+        'encrypted_content': enc.content,
+        'iv': enc.iv,
+        'created_at': DateTime.now().toUtc().toIso8601String(), 
+
+      }).select().single();
+      setState(() {
+        final idx = _messages.indexWhere((m) => m['localId'] == tempId);
+        if (idx != -1) {
+          _messages[idx] = {...inserted, 'decrypted_content': text, 'status': 'sent'};
+        }
+      });
+    } catch (e) {
+      setState(() {
+        final idx = _messages.indexWhere((m) => m['localId'] == tempId);
+        if (idx != -1) _messages[idx]['status'] = 'error';
+      });
+      Get.snackbar('Error', 'Message failed to send');
     }
+  }
+
+Future<void> _ensureConversationExists() async {
+    if (_conversationId != null && _conversationId!.isNotEmpty) return;
+
+    final existing = await _supabase
+        .from('conversations')
+        .select('id')
+        .eq('doctor_id', _currentUserId)
+        .eq('patient_id', widget.partnerId)
+        .maybeSingle();
+
+    if (existing != null) {
+      _conversationId = existing['id'] as String;
+      return;
+    }
+
+    // Fetch public keys
+    final rows = await _supabase
+        .from('user_profiles')
+        .select('id, public_key')
+        .inFilter('id', [_currentUserId, widget.partnerId]);
+
+    final Map<String, String> pubKeys = {};
+    for (final r in rows) {
+      pubKeys[r['id'] as String] = r['public_key'] as String;
+    }
+
+    if (!pubKeys.containsKey(_currentUserId) ||
+        !pubKeys.containsKey(widget.partnerId)) {
+      throw Exception('Encryption keys missing. Please restart the app.');
+    }
+
+    final aesKey = EncryptionService.generateAESKey();
+    final aesB64 = aesKey.base64;
+
+    final encForPatient = EncryptionService.encryptWithRSA(
+      aesB64,
+      EncryptionService.parsePublicKeyFromPem(pubKeys[widget.partnerId]!),
+    );
+    final encForDoctor = EncryptionService.encryptWithRSA(
+      aesB64,
+      EncryptionService.parsePublicKeyFromPem(pubKeys[_currentUserId]!),
+    );
+
+    try {
+      final newConv = await _supabase
+          .from('conversations')
+          .insert({
+            'patient_id': widget.partnerId,
+            'doctor_id': _currentUserId,
+            'aes_key_encrypted_for_patient': encForPatient,
+            'aes_key_encrypted_for_doctor': encForDoctor,
+          })
+          .select('id')
+          .single();
+      _conversationId = newConv['id'] as String;
+    } catch (e) {
+      // Duplicate key error (code 23505) – conversation created by other party
+      if (e.toString().contains('23505')) {
+        final retry = await _supabase
+            .from('conversations')
+            .select('id')
+            .eq('doctor_id', _currentUserId)
+            .eq('patient_id', widget.partnerId)
+            .maybeSingle();
+        if (retry != null) {
+          _conversationId = retry['id'] as String;
+          return;
+        }
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> _uploadAndSendMedia(File file, String type) async {
+    if (_sending) return;
+    setState(() => _sending = true);
+
+    final localId = _uuid.v4();
+    final temp = {
+      'localId': localId,
+      'id': null,
+      'conversation_id': _conversationId,
+      'sender_id': _currentUserId,
+      'media_url': null,
+      'media_type': type,
+      'uploading': true,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+      'decrypted_content': null,
+      'status': 'uploading',
+    };
+    setState(() => _messages.add(temp));
     _scrollToBottom();
 
-    final inserted = await _supabase
-        .from('messages')
-        .insert({
-          'conversation_id': _conversationId,
-          'sender_id': _currentUserId,
-          'encrypted_content': enc.content,
-          'iv': enc.iv,
-        })
-        .select()
-        .single();
-    if (mounted) {
+    try {
+      // 1. Read raw bytes
+      final rawBytes = await file.readAsBytes();
+
+      // 2. Encrypt bytes with the conversation AES key
+      final encryptedBytes = await EncryptionService.encryptBytes(rawBytes, _aesKey!);
+
+      // 3. Upload encrypted blob — note the .enc extension
+      final ext = file.path.split('.').last;
+      final path =
+          'chat/$_conversationId/${DateTime.now().millisecondsSinceEpoch}.$ext.enc';
+      await _supabase.storage
+          .from('chat-media')
+          .uploadBinary(path, encryptedBytes,
+          fileOptions: const FileOptions(contentType: 'application/octet-stream'));
+
+      final url = _supabase.storage.from('chat-media').getPublicUrl(path);
+
+      // 4. Insert message row — media_type carries the original type (image/video)
+      final inserted = await _supabase.from('messages').insert({
+        'conversation_id': _conversationId,
+        'sender_id': _currentUserId,
+        'media_url': url,
+        'media_type': type,          
+        'is_encrypted_media': true,  
+        'created_at': DateTime.now().toUtc().toIso8601String(),
+      }).select().single();
+
       setState(() {
-        final idx = _messages.indexWhere((m) => m['id'] == null);
+        final idx = _messages.indexWhere((m) => m['localId'] == localId);
         if (idx != -1) {
-          _messages[idx] = {...inserted, 'decrypted_content': text};
+          _messages[idx] = {...inserted, 'decrypted_content': null, 'status': 'sent'};
         }
+      });
+    } catch (e) {
+      setState(() {
+        final idx = _messages.indexWhere((m) => m['localId'] == localId);
+        if (idx != -1) _messages[idx]['status'] = 'error';
+      });
+      Get.snackbar('Error', 'Media upload failed: $e');
+    } finally {
+      setState(() => _sending = false);
+    }
+  }
+
+  //  Reactions 
+  void _showReactionPicker(String msgId) {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => SizedBox(
+        height: 80,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: ['👍', '❤️', '😂', '😮', '😢', '😡'].map((emoji) {
+            return GestureDetector(
+              onTap: () => _toggleReaction(msgId, emoji),
+              child: Text(emoji, style: const TextStyle(fontSize: 32)),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _toggleReaction(String msgId, String emoji) async {
+    final existing = _reactions[msgId]?.firstWhereOrNull(
+          (r) => r['user_id'] == _currentUserId && r['emoji'] == emoji,
+    );
+    if (existing != null) {
+      await _supabase.from('message_reactions').delete().eq('id', existing['id']);
+      setState(() {
+        _reactions[msgId]!.removeWhere((r) => r['id'] == existing['id']);
+        if (_reactions[msgId]!.isEmpty) _reactions.remove(msgId);
+      });
+    } else {
+      final inserted = await _supabase.from('message_reactions').insert({
+        'message_id': msgId,
+        'user_id': _currentUserId,
+        'emoji': emoji,
+      }).select().single();
+      setState(() {
+        _reactions.putIfAbsent(msgId, () => []).add(inserted);
       });
     }
   }
 
-
-  Future<void> _pickAndSendImage() async {
-    final file = await _picker.pickImage(source: ImageSource.gallery);
-    if (file == null) return;
-    await _uploadAndSendMedia(File(file.path), 'image');
-  }
-
-  Future<void> _pickAndSendVideo() async {
-    final file = await _picker.pickVideo(source: ImageSource.gallery);
-    if (file == null) return;
-    await _uploadAndSendMedia(File(file.path), 'video');
-  }
-Future<void> _uploadAndSendMedia(File file, String mediaType) async {
-    if (_sending) return;
-    final l = AppLocalizations.of(context)!;
-    if(mounted){
-      setState(() => _sending = true);
+  void _onTextChanged(String text) {
+    if (text.isEmpty) {
+      if (_iAmTyping) {
+        _iAmTyping = false;
+        _updateTyping(false);
+        _typingTimer?.cancel();
+      }
+      return;
     }
-    try {
-      final ext = file.path.split('.').last;
-      final path =
-          'chat/$_conversationId/${DateTime.now().millisecondsSinceEpoch}.$ext';
-
-      await _supabase.storage.from('chat-media').upload(path, file);
-      final url = _supabase.storage.from('chat-media').getPublicUrl(path);
-
-      final tempMsg = {
-        'id': null,
-        'conversation_id': _conversationId,
-        'sender_id': _currentUserId,
-        'media_url': url,
-        'media_type': mediaType,
-        'is_key_exchange': false,
-        'created_at': DateTime.now().toUtc().toIso8601String(),
-        'decrypted_content': null,
-      };
-      if(mounted){
-        setState(() => _messages.add(tempMsg));
-      }
-      _scrollToBottom();
-
-      final inserted = await _supabase
-          .from('messages')
-          .insert({
-            'conversation_id': _conversationId,
-            'sender_id': _currentUserId,
-            'media_url': url,
-            'media_type': mediaType,
-          })
-          .select()
-          .single();
-
-      if(mounted){
-        setState(() {
-          final idx = _messages.indexWhere((m) => m['id'] == null);
-          if (idx != -1) {
-            _messages[idx] = {...inserted, 'decrypted_content': null};
-          }
-        });
-      }
-    } catch (e) {
-      if(mounted){
-        setState(() => _messages.removeWhere((m) => m['id'] == null));
-      }
-        Get.snackbar(l.error, '${l.mediaUploadFailed}: $e');
-
-    } finally {
-if(mounted){
-  setState(() => _sending = false);
-}
+    if (!_iAmTyping) {
+      _iAmTyping = true;
+      _updateTyping(true);
     }
+    _typingTimer?.cancel();
+    _typingTimer = Timer(const Duration(seconds: 2), () {
+      _iAmTyping = false;
+      _updateTyping(false);
+    });
   }
 
-
-  //  BUILD - Constructs the UI for the consultation screen.
-
+  //  Build 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.appt.patientName),
-        backgroundColor: const Color(0xFF1565C0),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(widget.partnerName),
+            if (_partnerTyping)
+              const Text('typing...',
+                  style: TextStyle(fontSize: 12, color: Colors.white70)),
+          ],
+        ),
+        backgroundColor: AppConstants.primaryColor,
         foregroundColor: Colors.white,
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : Column(
-              children: [
-                Expanded(
-                  child: ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(12),
-                    itemCount: _messages.length,
-                    itemBuilder: (_, i) {
-                      final msg = _messages[i];
-                      return _MessageBubble(
-                        msg: msg,
-                        isMe: msg['sender_id'] == _currentUserId,
-                      );
-                    },
-                  ),
-                ),
-                _buildInputArea(),
-              ],
+        children: [
+          Expanded(
+            child: NotificationListener<ScrollNotification>(
+              onNotification: (notification) {
+                if (notification is ScrollEndNotification &&
+                    _scrollController.position.pixels <= 100 &&
+                    !_isLoadingMore &&
+                    _hasMore) {
+                  _loadMessages(initial: false);
+                }
+                return false;
+              },
+              child: ListView.builder(
+                controller: _scrollController,
+                padding: const EdgeInsets.all(12),
+                itemCount: _messages.length + (_isLoadingMore ? 1 : 0),
+                itemBuilder: (_, i) {
+                  if (i == 0 && _isLoadingMore) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final msg = _messages[i - (_isLoadingMore ? 1 : 0)];
+                  return MessageBubble(
+                    msg: msg,
+                    isMe: msg['sender_id'] == _currentUserId,
+                    reactions: _reactions[msg['id']] ?? [],
+                    aesKey: _aesKey,                      
+                    onLongPress: () => _showReactionPicker(msg['id'] ?? ''),
+                    onMediaLongPress: msg['media_url'] != null
+                        ? () => _showMediaOptions(msg['media_url'], msg['media_type'])
+                        : null,
+                  );
+                },
+              ),
             ),
+          ),
+          _buildInputArea(),
+        ],
+      ),
     );
   }
-
+  void _showMediaOptions(String url, String type) {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.download),
+              title: const Text('Download'),
+              onTap: () {
+                Navigator.pop(context);
+                MediaDownloadService.downloadAndSave(
+                  url,
+                  '${DateTime.now().millisecondsSinceEpoch}.${type == 'image' ? 'jpg' : 'mp4'}',
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.share),
+              title: const Text('Share'),
+              onTap: () async {
+                Navigator.pop(context);
+                // Share directly from URL
+                await Share.share(url);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
   Widget _buildInputArea() {
+    if (!widget.canSendMessages) {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        color: Colors.grey.shade100,
+        child: Center(
+          child: Text(
+            'Messaging is only allowed on the day of the appointment.',
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
     return SafeArea(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -470,19 +822,20 @@ if(mounted){
           children: [
             IconButton(
               icon: const Icon(Icons.image_outlined),
-              onPressed: _pickAndSendImage,
-              color: const Color(0xFF1565C0),
+              onPressed: _pickAndSendImages,
+              color: AppConstants.primaryColor,
             ),
             IconButton(
               icon: const Icon(Icons.videocam_outlined),
               onPressed: _pickAndSendVideo,
-              color: const Color(0xFF1565C0),
+              color: AppConstants.primaryColor,
             ),
             Expanded(
               child: TextField(
                 controller: _messageController,
+                onChanged: _onTextChanged,
                 decoration: InputDecoration(
-hintText: AppLocalizations.of(context)!.typeAMessage,
+                  hintText: AppLocalizations.of(context)?.typeAMessage ?? 'Type a message...',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(24),
                     borderSide: BorderSide.none,
@@ -509,178 +862,15 @@ hintText: AppLocalizations.of(context)!.typeAMessage,
               )
             else
               CircleAvatar(
-                backgroundColor: const Color(0xFF1565C0),
+                backgroundColor: AppConstants.primaryColor,
                 child: IconButton(
-                  icon: const Icon(Icons.send, color: Colors.white, size: 18),
+                  icon:
+                  const Icon(Icons.send, color: Colors.white, size: 18),
                   onPressed: _sendMessage,
                 ),
               ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-//  MESSAGE BUBBLE - Displays text or media messages with appropriate styling. Decrypts message content for display and handles media types (images/videos) with previews.
-
-class _MessageBubble extends StatelessWidget {
-  final Map<String, dynamic> msg;
-  final bool isMe;
-
-  const _MessageBubble({required this.msg, required this.isMe});
-
-  @override
-  Widget build(BuildContext context) {
-    final time = DateTime.parse(msg['created_at'] as String).toLocal();
-    final timeStr = '${time.hour}:${time.minute.toString().padLeft(2, '0')}';
-
-    if (msg['is_key_exchange'] == true) {
-      return Center(
-        child: Container(
-          margin: const EdgeInsets.symmetric(vertical: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade200,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Text(
-            msg['decrypted_content'] as String,
-            style: const TextStyle(fontSize: 12, color: Colors.grey),
-          ),
-        ),
-      );
-    }
-
-    Widget content;
-    if (msg['media_type'] == 'image') {
-      content = ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Image.network(
-          msg['media_url'] as String,
-          width: 200,
-          fit: BoxFit.cover,
-          loadingBuilder: (_, child, progress) => progress == null
-              ? child
-              : const SizedBox(
-                  width: 200,
-                  height: 140,
-                  child: Center(child: CircularProgressIndicator()),
-                ),
-        ),
-      );
-    } else if (msg['media_type'] == 'video') {
-      content = _VideoPreview(url: msg['media_url'] as String);
-    } else {
-      content = Text(
-        msg['decrypted_content'] as String? ?? '',
-        style: TextStyle(
-          color: isMe ? Colors.white : Colors.black87,
-          fontSize: 15,
-        ),
-      );
-    }
-
-    return Align(
-      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.all(10),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
-        ),
-        decoration: BoxDecoration(
-          color: isMe ? const Color(0xFF1565C0) : Colors.grey.shade200,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(18),
-            topRight: const Radius.circular(18),
-            bottomLeft: Radius.circular(isMe ? 18 : 4),
-            bottomRight: Radius.circular(isMe ? 4 : 18),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            content,
-            const SizedBox(height: 4),
-            Text(
-              timeStr,
-              style: TextStyle(
-                fontSize: 10,
-                color: isMe ? Colors.white70 : Colors.grey.shade600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _VideoPreview extends StatefulWidget {
-  final String url;
-  const _VideoPreview({required this.url});
-
-  @override
-  State<_VideoPreview> createState() => _VideoPreviewState();
-}
-
-class _VideoPreviewState extends State<_VideoPreview> {
-  late VideoPlayerController _controller;
-  bool _initialized = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
-      ..initialize().then((_) {
-        if (mounted) setState(() => _initialized = true);
-      });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_initialized) {
-      return const SizedBox(
-        width: 200,
-        height: 120,
-        child: Center(child: CircularProgressIndicator()),
-      );
-    }
-    return GestureDetector(
-      onTap: () => setState(() {
-        _controller.value.isPlaying ? _controller.pause() : _controller.play();
-      }),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          SizedBox(
-            width: 200,
-            child: AspectRatio(
-              aspectRatio: _controller.value.aspectRatio,
-              child: VideoPlayer(_controller),
-            ),
-          ),
-          if (!_controller.value.isPlaying)
-            Container(
-              decoration: const BoxDecoration(
-                color: Colors.black45,
-                shape: BoxShape.circle,
-              ),
-              padding: const EdgeInsets.all(8),
-              child: const Icon(
-                Icons.play_arrow,
-                color: Colors.white,
-                size: 32,
-              ),
-            ),
-        ],
       ),
     );
   }

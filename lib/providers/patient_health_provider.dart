@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:healthpost_app/services/api_service.dart';
 
-//  READ PROVIDERS (unchanged) 
 
 final patientHealthSummaryProvider =
     FutureProvider.family<Map<String, dynamic>, String>((ref, patientId) async {
@@ -31,16 +30,14 @@ class SaveNotifier extends Notifier<SaveState> {
   @override
   SaveState build() => const SaveState();
 
-  /// Generic helper: runs [call], updates state, re-fetches the summary.
-  Future<bool> run(
+   Future<bool> run(
     Future<void> Function() call, {
     required String patientId,
   }) async {
     state = const SaveState(isSaving: true);
     try {
       await call();
-      // Invalidate so the screen re-fetches the latest data automatically.
-      ref.invalidate(patientHealthSummaryProvider(patientId));
+       ref.invalidate(patientHealthSummaryProvider(patientId));
       state = const SaveState();
       return true;
     } catch (e) {

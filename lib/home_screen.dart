@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:healthpost_app/appointment_screen.dart';
 import 'package:healthpost_app/chat_list_screen.dart';
-import 'package:healthpost_app/chat_screen.dart';
 import 'package:healthpost_app/home_page.dart';
 import 'package:healthpost_app/l10n/app_localizations.dart';
 import 'package:healthpost_app/profile_screen.dart';

@@ -1,7 +1,9 @@
 
 import 'package:dio/dio.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
+
 abstract class NotifType {
   static const appointmentConfirmed = 'appointment_confirmed';
   static const appointmentCancelled = 'appointment_cancelled';
@@ -13,15 +15,9 @@ abstract class NotifType {
   static const newAppointment = 'new_appointment';
   static const noShow         = 'no_show';
 }
+
 class ApiService {
-  //  BASE URL 
-
-  static String get baseUrl {
-    if (kIsWeb) return 'http://127.0.0.1:8001/api';
-    return 'http://10.0.2.2:8001/api'; // Android emulator → host loopback
-  }
-
-  //  DIO SINGLETON 
+  static String baseUrl = 'http://45.115.217.244/api';
 
   static Dio? _dio;
 
@@ -66,12 +62,59 @@ class ApiService {
 
     return _dio!;
   }
+  static Dio? _supabaseFunctionsDio;
 
-  // Reset singleton (call after logout)
+  static Dio get supabaseFunctionsDio {
+    if (_supabaseFunctionsDio != null) return _supabaseFunctionsDio!;
+
+    final supabaseAnonKey = dotenv.env['supabase_anonKey'];
+    if (supabaseAnonKey == null || supabaseAnonKey.isEmpty) {
+      throw Exception('Missing supabase_anonKey in .env file');
+    }
+
+    _supabaseFunctionsDio = Dio(
+      BaseOptions(
+        baseUrl: 'https://clmlpgtxonfdnhjgdtxm.supabase.co/functions/v1',
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 15),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $supabaseAnonKey',
+        },
+      ),
+    );
+    return _supabaseFunctionsDio!;
+  }
   static void resetDio() => _dio = null;
+
+  static Future<void> _sendPushNotification({
+    required String recipientUserId,
+    required String userType,
+    required String title,
+    required String body,
+    required String type,
+    Map<String, String>? data,
+  }) async {
+    try {
+      await Supabase.instance.client.functions.invoke(
+        'send-push-notification',
+        body: {
+          'recipientUserId': recipientUserId,
+          'userType': userType,
+          'title': title,
+          'body': body,
+          'type': type,
+          'data': data ?? {},
+        },
+      );
+    } catch (e) {
+      debugPrint('Notification send failed: $e');
+    }
+  }
+
   static Future<void> sendNotification({
     required String recipientUserId,
-    required String userType, // 'patient' | 'doctor'
+    required String userType,
     required String title,
     required String body,
     required String type,
@@ -79,7 +122,7 @@ class ApiService {
   }) async {
     final supabase = Supabase.instance.client;
     await supabase.functions.invoke(
-      'send-notification',
+      'send-push-notification',
       body: {
         'recipientUserId': recipientUserId,
         'userType': userType,
@@ -90,7 +133,6 @@ class ApiService {
       },
     );
   }
-  //  TURN 
 
   static Future<Map<String, dynamic>> fetchTurnCredentials() async {
     try {
@@ -101,12 +143,10 @@ class ApiService {
     }
   }
 
-  //  CALLS 
-
   static Future<Map<String, dynamic>> initiateCall({
     required String calleeId,
     required String appointmentId,
-    required String callType, // 'audio' | 'video'
+    required String callType,
   }) async {
     try {
       final res = await dio.post('/calls/initiate', data: {
@@ -122,7 +162,7 @@ class ApiService {
 
   static Future<void> updateCallStatus({
     required String callId,
-    required String status, // 'accepted' | 'declined' | 'ended' | 'missed'
+    required String status,
   }) async {
     try {
       await dio.patch('/calls/$callId/status', data: {'status': status});
@@ -139,8 +179,6 @@ class ApiService {
       throw _handleError(e);
     }
   }
-
-  //  APPOINTMENTS 
 
   static Future<Map<String, dynamic>> bookAppointment({
     required int doctorTableId,
@@ -169,7 +207,7 @@ class ApiService {
   }) async {
     try {
       final dateStr =
-          '${date.year}-${date.month.toString().padLeft(2,'0')}-${date.day.toString().padLeft(2,'0')}';
+          '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
       final res = await dio.post('/appointments/check-slots',
           data: {'doctor_id': doctorTableId, 'date': dateStr});
       return List<String>.from((res.data as Map)['booked_slots'] ?? []);
@@ -216,21 +254,83 @@ class ApiService {
     }
   }
 
-  static Future<Map<String, dynamic>> cancelAppointment(
-      String appointmentId) async {
+  static Future<Map<String, dynamic>> cancelAppointment(String appointmentId) async {
     try {
       final res = await dio.patch('/appointments/$appointmentId/cancel');
-      return res.data as Map<String, dynamic>;
+      final appointment = res.data as Map<String, dynamic>;
+      debugPrint('cancelAppointment response: $appointment');
+
+      dynamic patientIdRaw = appointment['patient_id'];
+      debugPrint(' patient_id raw: $patientIdRaw (type: ${patientIdRaw.runtimeType})');
+
+      String? patientUserId;
+      if (patientIdRaw is String && patientIdRaw.contains('-')) {
+        patientUserId = patientIdRaw;
+      } else if (patientIdRaw is int) {
+        final supabase = Supabase.instance.client;
+        final patientRecord = await supabase
+            .from('patients')
+            .select('user_id')
+            .eq('id', patientIdRaw)
+            .maybeSingle();
+        patientUserId = patientRecord?['user_id'] as String?;
+      }
+
+      if (patientUserId == null) {
+        debugPrint('❌ Could not resolve patient user ID');
+      } else {
+        final doctorName = appointment['doctor_name'] ?? 'Doctor';
+        await _sendPushNotification(
+          recipientUserId: patientUserId,
+          userType: 'patient',
+          title: 'Appointment Cancelled',
+          body: 'Your appointment with Dr. $doctorName has been cancelled.',
+          type: NotifType.appointmentCancelled,
+          data: {'appointment_id': appointmentId},
+        );
+      }
+      return appointment;
     } on DioException catch (e) {
       throw _handleError(e);
     }
   }
 
-  static Future<Map<String, dynamic>> confirmAppointment(
-      String appointmentId) async {
+  static Future<Map<String, dynamic>> confirmAppointment(String appointmentId) async {
     try {
       final res = await dio.patch('/appointments/$appointmentId/confirm');
-      return res.data as Map<String, dynamic>;
+      final appointment = res.data as Map<String, dynamic>;
+      debugPrint('confirmAppointment response: $appointment');
+
+      dynamic patientIdRaw = appointment['patient_id'];
+      debugPrint(' patient_id raw: $patientIdRaw (type: ${patientIdRaw.runtimeType})');
+
+      String? patientUserId;
+      if (patientIdRaw is String && patientIdRaw.contains('-')) {
+        patientUserId = patientIdRaw;
+      } else if (patientIdRaw is int) {
+        final supabase = Supabase.instance.client;
+        final patientRecord = await supabase
+            .from('patients')
+            .select('user_id')
+            .eq('id', patientIdRaw)
+            .maybeSingle();
+        patientUserId = patientRecord?['user_id'] as String?;
+      }
+
+      if (patientUserId == null) {
+        debugPrint(' Could not resolve patient user ID');
+      } else {
+        final doctorName = appointment['doctor_name'] ?? 'Doctor';
+        await _sendPushNotification(
+          recipientUserId: patientUserId,
+          userType: 'patient',
+          title: 'Appointment Confirmed',
+          body: 'Your appointment with Dr. $doctorName has been confirmed.',
+          type: NotifType.appointmentConfirmed,
+          data: {'appointment_id': appointmentId},
+        );
+      }
+      return appointment;
     } on DioException catch (e) {
       throw _handleError(e);
     }
@@ -256,8 +356,6 @@ class ApiService {
     }
   }
 
-  //  DOCTORS 
-
   static Future<Map<String, dynamic>> getDoctorProfile() async {
     try {
       final res = await dio.get('/doctors/me');
@@ -277,7 +375,8 @@ class ApiService {
   }
 
   static Future<List<Map<String, dynamic>>> getMonthlyAppointments({
-    int? year, int? month,
+    int? year,
+    int? month,
   }) async {
     try {
       final now = DateTime.now();
@@ -318,11 +417,9 @@ class ApiService {
       throw _handleError(e);
     }
   }
-//  HEALTH RECORDS 
 
   static Future<Map<String, dynamic>> getPatientHealthSummary(
-    String patientId,
-  ) async {
+      String patientId) async {
     try {
       final res = await dio.get('/health-records/summary/$patientId');
       return res.data as Map<String, dynamic>;
@@ -330,7 +427,65 @@ class ApiService {
       throw _handleError(e);
     }
   }
-  //  ERROR HANDLER 
+
+  static Future<List<Map<String, dynamic>>> getHealthposts() async {
+    final res = await dio.get('/healthposts/');
+    return List<Map<String, dynamic>>.from(res.data as List);
+  }
+
+  static Future<List<Map<String, dynamic>>> getFacilities() async {
+    final res = await dio.get('/facilities/');
+    return List<Map<String, dynamic>>.from(res.data as List);
+  }
+
+  static Future<Map<String, dynamic>> createReferral(
+      Map<String, dynamic> payload) async {
+    final res = await dio.post('/referrals/', data: payload);
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  static Future<List<Map<String, dynamic>>> getPatientReferrals(
+      String patientId) async {
+    final res = await dio.get('/referrals/',
+        queryParameters: {'patient_id': patientId});
+    return List<Map<String, dynamic>>.from(res.data as List);
+  }
+
+
+  static Future<Map<String, String>> initiateLiveKitCall({
+    required String callerId,
+    required String calleeId,
+    required String appointmentId,
+    required String callType,
+    required String callerName,
+  }) async {
+    try {
+      debugPrint(' Calling Supabase Edge Function /initiate-call');
+      debugPrint('   callerId: $callerId');
+      debugPrint('   calleeId: $calleeId');
+
+      final response = await supabaseFunctionsDio.post(
+        '/initiate-call',
+        data: {
+          'callerId': callerId,
+          'calleeId': calleeId,
+          'appointmentId': appointmentId,
+          'callType': callType,
+          'callerName': callerName,
+        },
+      );
+
+      debugPrint(' initiate-call response: ${response.data}');
+      final data = response.data as Map<String, dynamic>;
+      return {
+        'callerToken': data['callerToken'] as String,
+        'roomName': data['roomName'] as String,
+      };
+    } on DioException catch (e) {
+      debugPrint(' initiate-call failed: ${e.response?.statusCode} ${e.response?.data}');
+      throw _handleError(e);
+    }
+  }
 
   static String _handleError(DioException e) {
     if (e.type == DioExceptionType.connectionTimeout ||
@@ -345,13 +500,20 @@ class ApiService {
         ? e.response?.data['detail'] ?? 'अज्ञात त्रुटि'
         : 'अज्ञात त्रुटि';
     switch (statusCode) {
-      case 400: return 'अनुरोध गलत छ: $detail';
-      case 401: return 'लग इन आवश्यक छ।';
-      case 403: return 'यो काम गर्न अनुमति छैन।';
-      case 404: return 'डाटा भेटिएन।';
-      case 409: return 'यो समय अहिले बुक भयो। अर्को छान्नुहोस्।';
-      case 500: return 'सर्भर त्रुटि। पछि पुनः प्रयास गर्नुहोस्।';
-      default:  return detail.toString();
+      case 400:
+        return 'अनुरोध गलत छ: $detail';
+      case 401:
+        return 'लग इन आवश्यक छ।';
+      case 403:
+        return 'यो काम गर्न अनुमति छैन।';
+      case 404:
+        return 'डाटा भेटिएन।';
+      case 409:
+        return 'यो समय अहिले बुक भयो। अर्को छान्नुहोस्।';
+      case 500:
+        return 'सर्भर त्रुटि। पछि पुनः प्रयास गर्नुहोस्।';
+      default:
+        return detail.toString();
     }
   }
 }

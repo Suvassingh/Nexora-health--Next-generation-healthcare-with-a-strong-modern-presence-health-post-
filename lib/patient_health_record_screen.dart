@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:healthpost_app/l10n/app_localizations.dart';
 import 'package:healthpost_app/providers/patient_health_provider.dart';
 import 'package:healthpost_app/providers/selected_patient_provider.dart';
+import 'package:healthpost_app/referal_screen.dart';
 
 import 'package:intl/intl.dart';
 import '../app_constants.dart';
@@ -34,7 +35,6 @@ class PatientHealthRecordScreen extends ConsumerWidget {
     final summaryAsync = ref.watch(patientHealthSummaryProvider(patientId));
     final saveState = ref.watch(saveNotifierProvider);
 
-    // Show global error snackbar if a save failed
     ref.listen<SaveState>(saveNotifierProvider, (_, next) {
       if (next.error != null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -85,6 +85,7 @@ class PatientHealthRecordScreen extends ConsumerWidget {
                   const SizedBox(height: 12),
                   _buildPrescriptions(summary, context, ref, patientId),
                   const SizedBox(height: 24),
+                  ReferralListSection(patientId: patientId),
                 ],
               ),
             ),
@@ -102,7 +103,7 @@ class PatientHealthRecordScreen extends ConsumerWidget {
     );
   }
 
-  //  APP BAR 
+  //  APP BAR
 
   AppBar _buildAppBar(
     BuildContext context,
@@ -137,7 +138,7 @@ class PatientHealthRecordScreen extends ConsumerWidget {
     );
   }
 
-  //  PATIENT SWITCHER 
+  //  PATIENT SWITCHER
 
   void _showPatientSwitcherSheet(BuildContext context, WidgetRef ref) {
     final currentId = ref.read(selectedPatientIdProvider);
@@ -334,7 +335,7 @@ class PatientHealthRecordScreen extends ConsumerWidget {
     );
   }
 
-  //  FLAGS 
+  //  FLAGS
 
   Widget _buildFlags(Map<String, dynamic> summary, BuildContext context) {
     final flags = Map<String, dynamic>.from(summary['flags'] ?? {});
@@ -403,7 +404,7 @@ class PatientHealthRecordScreen extends ConsumerWidget {
     ),
   );
 
-  //  PROFILE (read-only) 
+  //  PROFILE (read-only)
 
   Widget _buildProfile(Map<String, dynamic> summary, BuildContext context) {
     final p = Map<String, dynamic>.from(summary['profile'] ?? {});
@@ -501,7 +502,7 @@ class PatientHealthRecordScreen extends ConsumerWidget {
     );
   }
 
-  //  VITALS 
+  //  VITALS
 
   Widget _buildLatestVitals(
     Map<String, dynamic> summary,
@@ -580,7 +581,7 @@ class PatientHealthRecordScreen extends ConsumerWidget {
     ),
   );
 
-  //  ALLERGIES 
+  //  ALLERGIES
 
   Widget _buildAllergies(
     Map<String, dynamic> summary,
@@ -680,7 +681,7 @@ class PatientHealthRecordScreen extends ConsumerWidget {
     );
   }
 
-  //  CONDITIONS 
+  //  CONDITIONS
 
   Widget _buildConditions(
     Map<String, dynamic> summary,
@@ -778,7 +779,7 @@ class PatientHealthRecordScreen extends ConsumerWidget {
     );
   }
 
-  //  MEDICAL HISTORY 
+  //  MEDICAL HISTORY
 
   Widget _buildMedicalHistory(
     Map<String, dynamic> summary,
@@ -958,7 +959,7 @@ class PatientHealthRecordScreen extends ConsumerWidget {
     );
   }
 
-  //  IMMUNISATIONS 
+  //  IMMUNISATIONS
 
   Widget _buildImmunisations(
     Map<String, dynamic> summary,
@@ -1040,7 +1041,7 @@ class PatientHealthRecordScreen extends ConsumerWidget {
     );
   }
 
-  //  FAMILY HISTORY 
+  //  FAMILY HISTORY
 
   Widget _buildFamilyHistory(
     Map<String, dynamic> summary,
@@ -1138,7 +1139,7 @@ class PatientHealthRecordScreen extends ConsumerWidget {
     );
   }
 
-  //  PRESCRIPTIONS (moved here from top-level) 
+  //  PRESCRIPTIONS (moved here from top-level)
 
   Widget _buildPrescriptions(
     Map<String, dynamic> summary,
@@ -1277,6 +1278,7 @@ class PatientHealthRecordScreen extends ConsumerWidget {
       ),
     );
   }
+
   //  EDIT BOTTOM SHEETS
   void _showPrescriptionSheet(
     BuildContext context,
@@ -1579,7 +1581,7 @@ class _EditSheet extends StatelessWidget {
   }
 }
 
-//  VITALS SHEET 
+//  VITALS SHEET
 
 class _VitalsEditSheet extends ConsumerStatefulWidget {
   final String patientId;
@@ -1757,7 +1759,7 @@ class _VitalsEditSheetState extends ConsumerState<_VitalsEditSheet> {
   }
 }
 
-//  ALLERGY SHEET 
+//  ALLERGY SHEET
 
 class _AllergyEditSheet extends ConsumerStatefulWidget {
   final String patientId;
@@ -1860,7 +1862,7 @@ class _AllergyEditSheetState extends ConsumerState<_AllergyEditSheet> {
   }
 }
 
-//  CONDITION SHEET 
+//  CONDITION SHEET
 
 class _ConditionEditSheet extends ConsumerStatefulWidget {
   final String patientId;
@@ -1964,7 +1966,7 @@ class _ConditionEditSheetState extends ConsumerState<_ConditionEditSheet> {
   }
 }
 
-//  HISTORY SHEET 
+//  HISTORY SHEET
 
 class _HistoryEditSheet extends ConsumerStatefulWidget {
   final String patientId;
@@ -2105,7 +2107,7 @@ class _HistoryEditSheetState extends ConsumerState<_HistoryEditSheet> {
   }
 }
 
-//  IMMUNISATION SHEET 
+//  IMMUNISATION SHEET
 
 class _ImmunisationEditSheet extends ConsumerStatefulWidget {
   final String patientId;
@@ -2264,7 +2266,7 @@ class _ImmunisationEditSheetState
   }
 }
 
-//  FAMILY HISTORY SHEET 
+//  FAMILY HISTORY SHEET
 
 class _FamilyHistoryEditSheet extends ConsumerStatefulWidget {
   final String patientId;
@@ -2360,7 +2362,7 @@ class _FamilyHistoryEditSheetState
   }
 }
 
-//  PRESCRIPTION SHEET (moved here from inside class) 
+//  PRESCRIPTION SHEET (moved here from inside class)
 
 class _PrescriptionSheet extends ConsumerStatefulWidget {
   final String patientId;

@@ -77,7 +77,6 @@ class AppointmentsNotifier extends AsyncNotifier<AppointmentsData> {
     state = await AsyncValue.guard(_fetch);
   }
 
-  // Update status locally + refresh for snappy UI
   Future<void> updateStatus(
       String apptId,
       Future<void> Function(String) apiCall,

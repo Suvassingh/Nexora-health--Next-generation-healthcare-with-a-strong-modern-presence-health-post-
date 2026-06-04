@@ -1160,7 +1160,7 @@ abstract class AppLocalizations {
   /// No description provided for @qualificationRequired.
   ///
   /// In en, this message translates to:
-  /// **'Qualification is required'**
+  /// **'Qualification is required (e.g. MBBS, MD)'**
   String get qualificationRequired;
 
   /// No description provided for @selectHealthpost.
@@ -1304,7 +1304,7 @@ abstract class AppLocalizations {
   /// No description provided for @incompleteProfile.
   ///
   /// In en, this message translates to:
-  /// **'Incomplete profile'**
+  /// **'Please complete all required fields.'**
   String get incompleteProfile;
 
   /// No description provided for @nameRequired.
@@ -1316,7 +1316,7 @@ abstract class AppLocalizations {
   /// No description provided for @phoneRequired.
   ///
   /// In en, this message translates to:
-  /// **'Phone is required'**
+  /// **'Phone number is required'**
   String get phoneRequired;
 
   /// No description provided for @ageRequired.
@@ -1660,6 +1660,126 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Version 1.0.0'**
   String get appVersion;
+
+  /// No description provided for @medicalHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Medical History'**
+  String get medicalHistory;
+
+  /// No description provided for @phoneInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid phone number'**
+  String get phoneInvalid;
+
+  /// No description provided for @somethingWentWrong.
+  ///
+  /// In en, this message translates to:
+  /// **'Something went wrong'**
+  String get somethingWentWrong;
+
+  /// No description provided for @signInFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in failed'**
+  String get signInFailed;
+
+  /// No description provided for @enterEmailForReset.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your email to reset password'**
+  String get enterEmailForReset;
+
+  /// No description provided for @invalidCredentials.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid email or password'**
+  String get invalidCredentials;
+
+  /// No description provided for @emailNotVerified.
+  ///
+  /// In en, this message translates to:
+  /// **'Email not verified'**
+  String get emailNotVerified;
+
+  /// No description provided for @forgotPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Forgot password?'**
+  String get forgotPassword;
+
+  /// No description provided for @noInternetConnection.
+  ///
+  /// In en, this message translates to:
+  /// **'No internet connection. Please check your network.'**
+  String get noInternetConnection;
+
+  /// No description provided for @emailNotVerifiedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Email Not Verified'**
+  String get emailNotVerifiedTitle;
+
+  /// No description provided for @emailNotVerifiedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Please verify your email address before logging in. Check your inbox for a verification link.'**
+  String get emailNotVerifiedMessage;
+
+  /// No description provided for @resetPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset Password'**
+  String get resetPassword;
+
+  /// No description provided for @passwordResetSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Password reset link has been sent to your email.'**
+  String get passwordResetSent;
+
+  /// No description provided for @sendResetLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Send Reset Link'**
+  String get sendResetLink;
+
+  /// No description provided for @send.
+  ///
+  /// In en, this message translates to:
+  /// **'send'**
+  String get send;
+
+  /// No description provided for @ageMinimum18.
+  ///
+  /// In en, this message translates to:
+  /// **'ageMinimum18'**
+  String get ageMinimum18;
+
+  /// No description provided for @verifyEmailTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'verifyEmailTitle'**
+  String get verifyEmailTitle;
+
+  /// No description provided for @verifyEmailMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'verifyEmailMessage'**
+  String get verifyEmailMessage;
+
+  /// No description provided for @orSignInWith.
+  ///
+  /// In en, this message translates to:
+  /// **'Or SignIn With'**
+  String get orSignInWith;
+
+  /// No description provided for @google.
+  ///
+  /// In en, this message translates to:
+  /// **'Google'**
+  String get google;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

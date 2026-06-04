@@ -2,7 +2,7 @@
 class AppNotification {
   final String id;
   final String userId;
-  final String userType; // 'patient' | 'doctor'
+  final String userType;
   final String title;
   final String body;
   final String type;
@@ -47,7 +47,6 @@ class AppNotification {
     createdAt: createdAt,
   );
 
-  /// Icon for each notification type
   static const Map<String, String> _typeIcons = {
     'appointment_confirmed': '✅',
     'appointment_cancelled': '❌',

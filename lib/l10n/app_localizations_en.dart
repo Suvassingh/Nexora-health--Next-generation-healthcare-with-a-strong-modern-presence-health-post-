@@ -550,7 +550,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get specialtyRequired => 'Specialty is required';
 
   @override
-  String get qualificationRequired => 'Qualification is required';
+  String get qualificationRequired => 'Qualification is required (e.g. MBBS, MD)';
 
   @override
   String get selectHealthpost => 'Select Healthpost';
@@ -622,13 +622,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get signUpFailed => 'Sign up failed';
 
   @override
-  String get incompleteProfile => 'Incomplete profile';
+  String get incompleteProfile => 'Please complete all required fields.';
 
   @override
   String get nameRequired => 'Name is required';
 
   @override
-  String get phoneRequired => 'Phone is required';
+  String get phoneRequired => 'Phone number is required';
 
   @override
   String get ageRequired => 'Age is required';
@@ -804,4 +804,64 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get appVersion => 'Version 1.0.0';
+
+  @override
+  String get medicalHistory => 'Medical History';
+
+  @override
+  String get phoneInvalid => 'Invalid phone number';
+
+  @override
+  String get somethingWentWrong => 'Something went wrong';
+
+  @override
+  String get signInFailed => 'Sign in failed';
+
+  @override
+  String get enterEmailForReset => 'Enter your email to reset password';
+
+  @override
+  String get invalidCredentials => 'Invalid email or password';
+
+  @override
+  String get emailNotVerified => 'Email not verified';
+
+  @override
+  String get forgotPassword => 'Forgot password?';
+
+  @override
+  String get noInternetConnection => 'No internet connection. Please check your network.';
+
+  @override
+  String get emailNotVerifiedTitle => 'Email Not Verified';
+
+  @override
+  String get emailNotVerifiedMessage => 'Please verify your email address before logging in. Check your inbox for a verification link.';
+
+  @override
+  String get resetPassword => 'Reset Password';
+
+  @override
+  String get passwordResetSent => 'Password reset link has been sent to your email.';
+
+  @override
+  String get sendResetLink => 'Send Reset Link';
+
+  @override
+  String get send => 'send';
+
+  @override
+  String get ageMinimum18 => 'ageMinimum18';
+
+  @override
+  String get verifyEmailTitle => 'verifyEmailTitle';
+
+  @override
+  String get verifyEmailMessage => 'verifyEmailMessage';
+
+  @override
+  String get orSignInWith => 'Or SignIn With';
+
+  @override
+  String get google => 'Google';
 }

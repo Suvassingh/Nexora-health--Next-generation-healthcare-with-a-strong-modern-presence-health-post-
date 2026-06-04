@@ -1,8 +1,10 @@
 
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'api_service.dart';
 
 typedef StreamCallback = void Function(MediaStream stream);
@@ -22,11 +24,9 @@ class WebRTCService {
   String? _currentUserId;
   bool _disposed = false;
 
-  // Buffer ICE candidates arriving before remoteDescription is set
   bool _remoteDescriptionSet = false;
   final List<RTCIceCandidate> _pendingCandidates = [];
 
-  // TURN credential cache
   Map<String, dynamic>? _turnCache;
   int? _turnExpiryEpoch;
 
@@ -36,37 +36,43 @@ class WebRTCService {
     {'urls': 'stun:stun2.l.google.com:19302'},
   ];
 
-  //  TURN 
+  // ---------- TURN helpers ----------
+  String _sanitizeTurnUrl(String raw) {
+    while (raw.startsWith('turn:turn:')) raw = raw.substring(5);
+    while (raw.startsWith('turns:turns:')) raw = raw.substring(6);
+    if (!raw.startsWith('turn:') && !raw.startsWith('turns:') && !raw.startsWith('stun:')) {
+      raw = 'turn:$raw';
+    }
+    return raw;
+  }
 
   Future<Map<String, dynamic>?> _fetchTurnCredentials() async {
     try {
       final now = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
-      if (_turnCache != null &&
-          _turnExpiryEpoch != null &&
-          now + 10 < _turnExpiryEpoch!) {
+      if (_turnCache != null && _turnExpiryEpoch != null && now + 10 < _turnExpiryEpoch!) {
         return _turnCache;
       }
       final data = await ApiService.fetchTurnCredentials();
-      final urls = <String>[];
+      List<String> urls = [];
       if (data['urls'] is List) {
-        urls.addAll((data['urls'] as List).map((e) => e.toString()));
+        urls = (data['urls'] as List).map((e) => _sanitizeTurnUrl(e.toString())).toList();
       }
-      final expiry = data['expiry'] is int
-          ? data['expiry'] as int
-          : int.tryParse(data['expiry']?.toString() ?? '');
-      final ttl = data['ttl'] is int
-          ? data['ttl'] as int
-          : int.tryParse(data['ttl']?.toString() ?? '') ?? 3600;
+      if (urls.isEmpty) {
+        debugPrint('[TURN] No valid TURN URLs – using STUN only');
+        return null;
+      }
+      final expiry = data['expiry'] is int ? data['expiry'] : int.tryParse(data['expiry']?.toString() ?? '');
+      final ttl = data['ttl'] is int ? data['ttl'] : int.tryParse(data['ttl']?.toString() ?? '') ?? 3600;
       _turnCache = {
         'username': data['username']?.toString() ?? '',
         'credential': data['credential']?.toString() ?? '',
         'urls': urls,
       };
       _turnExpiryEpoch = expiry ?? (now + ttl);
-      debugPrint('[TURN] credentials fetched, expiry=$_turnExpiryEpoch');
+      debugPrint('[TURN] credentials fetched, expiry=$_turnExpiryEpoch, urls=$urls');
       return _turnCache;
-    } catch (e, st) {
-      debugPrint('[TURN] fetch error: $e\n$st');
+    } catch (e) {
+      debugPrint('[TURN] fetch error: $e');
       return null;
     }
   }
@@ -74,7 +80,7 @@ class WebRTCService {
   Future<Map<String, dynamic>> _buildIceConfig() async {
     final iceServers = List<Map<String, dynamic>>.from(_defaultStuns);
     final turn = await _fetchTurnCredentials();
-    if (turn != null) {
+    if (turn != null && turn['urls'] is List && (turn['urls'] as List).isNotEmpty) {
       iceServers.add({
         'urls': turn['urls'],
         'username': turn['username'],
@@ -84,9 +90,14 @@ class WebRTCService {
     return {'iceServers': iceServers, 'sdpSemantics': 'unified-plan'};
   }
 
-  //  MEDIA 
-
+  //  Media 
   Future<MediaStream> getLocalStream({required bool isVideo}) async {
+    if (_localStream != null) {
+      _localStream!.getTracks().forEach((t) => t.stop());
+      await _localStream!.dispose();
+      _localStream = null;
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
     _localStream = await navigator.mediaDevices.getUserMedia({
       'audio': true,
       'video': isVideo
@@ -96,14 +107,29 @@ class WebRTCService {
     return _localStream!;
   }
 
-  //  PEER CONNECTION 
-
+  //  Peer connection 
   Future<void> _createPeerConnection(bool isVideo) async {
+    await _pc?.close();
+    _pc = null;
+    _remoteDescriptionSet = false;
+    _pendingCandidates.clear();
+
     final iceConfig = await _buildIceConfig();
     debugPrint('[WebRTC] ICE servers count: ${(iceConfig['iceServers'] as List).length}');
-    _pc = await createPeerConnection(iceConfig);
 
-    for (var track in _localStream!.getTracks()) {
+    try {
+      _pc = await createPeerConnection(iceConfig);
+      if (_pc == null) throw Exception('RTCPeerConnection creation returned null');
+      await Future.delayed(Duration.zero);
+    } catch (e) {
+      debugPrint('[WebRTC] createPeerConnection failed: $e');
+      rethrow;
+    }
+
+    if (_localStream == null) {
+      throw StateError('[WebRTC] _localStream is null – call getLocalStream() first');
+    }
+    for (final track in _localStream!.getTracks()) {
       await _pc!.addTrack(track, _localStream!);
     }
 
@@ -126,28 +152,32 @@ class WebRTCService {
 
     _pc!.onIceConnectionState = (state) {
       debugPrint('[WebRTC] ICE state: $state');
-      if (!_disposed &&
-          (state == RTCIceConnectionState.RTCIceConnectionStateDisconnected ||
-              state == RTCIceConnectionState.RTCIceConnectionStateFailed)) {
+      if (!_disposed && (state == RTCIceConnectionState.RTCIceConnectionStateDisconnected ||
+          state == RTCIceConnectionState.RTCIceConnectionStateFailed)) {
+        onCallEnded?.call();
+      }
+    };
+
+    _pc!.onConnectionState = (state) {
+      debugPrint('[WebRTC] connection state: $state');
+      if (!_disposed && state == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
         onCallEnded?.call();
       }
     };
   }
 
   Future<void> _setRemoteDescriptionAndDrain(RTCSessionDescription desc) async {
+    if (_pc == null) throw Exception('Peer connection is null');
     await _pc!.setRemoteDescription(desc);
     _remoteDescriptionSet = true;
     debugPrint('[WebRTC] remoteDesc set — draining ${_pendingCandidates.length} candidates');
     for (final c in _pendingCandidates) {
-      try { await _pc!.addCandidate(c); } catch (e) {
-        debugPrint('[WebRTC] buffered candidate error: $e');
-      }
+      await _pc!.addCandidate(c);
     }
     _pendingCandidates.clear();
   }
 
-  //  CALLER 
-
+  //  Caller 
   Future<void> startAsCallerCall({
     required String callId,
     required String currentUserId,
@@ -155,8 +185,11 @@ class WebRTCService {
   }) async {
     _callId = callId;
     _currentUserId = currentUserId;
+
     await _createPeerConnection(isVideo);
-    _subscribeToSignals(); // BEFORE offer — never miss the answer
+    _subscribeToSignals();
+
+    if (_pc == null) throw Exception('Peer connection is null after creation');
     final offer = await _pc!.createOffer({
       'offerToReceiveAudio': true,
       'offerToReceiveVideo': isVideo,
@@ -166,8 +199,7 @@ class WebRTCService {
     debugPrint('[WebRTC] Caller: offer pushed');
   }
 
-  //  CALLEE 
-
+  //  Callee 
   Future<void> startAsCalleeCall({
     required String callId,
     required String currentUserId,
@@ -175,11 +207,14 @@ class WebRTCService {
   }) async {
     _callId = callId;
     _currentUserId = currentUserId;
-    await _createPeerConnection(isVideo);
-    _subscribeToSignals(); // BEFORE polling — buffer ICE, never drop it
 
+    await _createPeerConnection(isVideo);
+    _subscribeToSignals();
+
+    // Poll for offer (max 30 sec)
     Map<String, dynamic>? offerSignal;
-    for (int i = 0; i < 20; i++) {
+    for (int i = 0; i < 60; i++) {
+      if (_disposed) return;
       final signals = await _supabase
           .from('webrtc_signals')
           .select()
@@ -187,12 +222,17 @@ class WebRTCService {
           .eq('type', 'offer')
           .order('created_at', ascending: false)
           .limit(1);
-      if (signals.isNotEmpty) { offerSignal = signals[0]; break; }
+      if (signals.isNotEmpty) {
+        offerSignal = signals[0];
+        debugPrint('[WebRTC] Callee: offer found after ${i * 500}ms');
+        break;
+      }
       await Future.delayed(const Duration(milliseconds: 500));
     }
 
     if (offerSignal == null) {
-      debugPrint('[WebRTC] Callee: offer not found');
+      debugPrint('[WebRTC] Callee: offer not found after 30 seconds');
+      onCallEnded?.call();
       return;
     }
 
@@ -200,25 +240,30 @@ class WebRTCService {
     await _setRemoteDescriptionAndDrain(
       RTCSessionDescription(payload['sdp'], payload['type']),
     );
+    if (_pc == null) throw Exception('Peer connection is null');
     final answer = await _pc!.createAnswer();
     await _pc!.setLocalDescription(answer);
     await _pushSignal('answer', {'sdp': answer.sdp, 'type': answer.type});
     debugPrint('[WebRTC] Callee: answer pushed');
   }
 
-  //  SIGNALING 
-
+  //  Signaling 
   Future<void> _pushSignal(String type, Map<String, dynamic> payload) async {
-    await _supabase.from('webrtc_signals').insert({
-      'call_id': _callId,
-      'sender_id': _currentUserId,
-      'type': type,
-      'payload': payload,
-    });
+    if (_pc == null) return;
+    try {
+      await _supabase.from('webrtc_signals').insert({
+        'call_id': _callId,
+        'sender_id': _currentUserId,
+        'type': type,
+        'payload': payload,
+      });
+    } catch (e) {
+      debugPrint('[WebRTC] pushSignal error ($type): $e');
+    }
   }
 
   void _subscribeToSignals() {
-    
+    _signalingChannel?.unsubscribe();
     _signalingChannel = _supabase
         .channel('signals:${_callId!}')
         .onPostgresChanges(
@@ -232,19 +277,16 @@ class WebRTCService {
       ),
       callback: (payload) => _handleSignal(payload.newRecord),
     )
-        .subscribe((status, [err]) {
-      debugPrint('[WebRTC] signaling $status err=$err');
-    });
+        .subscribe();
   }
 
   Future<void> _handleSignal(Map<String, dynamic> signal) async {
     if (_disposed) return;
     if (signal['sender_id'] == _currentUserId) return;
 
-    final type = signal['type'];
+    final type = signal['type'] as String?;
     final payload = signal['payload'] as Map<String, dynamic>?;
-    if (payload == null) return;
-    debugPrint('[WebRTC] received: $type');
+    if (type == null || payload == null) return;
 
     switch (type) {
       case 'answer':
@@ -253,12 +295,15 @@ class WebRTCService {
         );
         break;
       case 'ice_candidate':
+        final candidateStr = payload['candidate'] as String?;
+        if (candidateStr == null || candidateStr.isEmpty) return;
         final candidate = RTCIceCandidate(
-          payload['candidate'], payload['sdpMid'], payload['sdpMLineIndex'],
+          candidateStr,
+          payload['sdpMid'] as String?,
+          payload['sdpMLineIndex'] as int?,
         );
         if (_remoteDescriptionSet) {
-          try { await _pc?.addCandidate(candidate); }
-          catch (e) { debugPrint('[WebRTC] addCandidate error: $e'); }
+          await _pc?.addCandidate(candidate);
         } else {
           _pendingCandidates.add(candidate);
         }
@@ -269,37 +314,56 @@ class WebRTCService {
     }
   }
 
-  //  CONTROLS 
+  //  Controls  
+  void setMuted(bool muted) {
+    _localStream?.getAudioTracks().forEach((t) => t.enabled = !muted);
+  }
 
-  void setMuted(bool muted) =>
-      _localStream?.getAudioTracks().forEach((t) => t.enabled = !muted);
+  void setCameraOff(bool off) {
+    _localStream?.getVideoTracks().forEach((t) => t.enabled = !off);
+  }
 
-  void setCameraOff(bool off) =>
-      _localStream?.getVideoTracks().forEach((t) => t.enabled = !off);
-
-  void setSpeaker(bool speaker) => Helper.setSpeakerphoneOn(speaker);
+  void setSpeaker(bool speaker) {
+    try {
+      Helper.setSpeakerphoneOn(speaker);
+    } catch (e) {
+      debugPrint('[WebRTC] setSpeaker error: $e');
+    }
+  }
 
   Future<void> switchCamera() async {
     final tracks = _localStream?.getVideoTracks();
-    if (tracks != null && tracks.isNotEmpty) await Helper.switchCamera(tracks[0]);
+    if (tracks != null && tracks.isNotEmpty) {
+      try {
+        await Helper.switchCamera(tracks[0]);
+      } catch (e) {
+        debugPrint('[WebRTC] switchCamera error: $e');
+      }
+    }
   }
 
+  //  Teardown  
   Future<void> hangup() async {
-    if (!_disposed && _callId != null) await _pushSignal('hangup', {});
+    if (_disposed) return;
+    if (_callId != null) await _pushSignal('hangup', {});
     await dispose();
   }
 
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
-    await _signalingChannel?.unsubscribe();
-    _localStream?.getTracks().forEach((t) => t.stop());
-    await _localStream?.dispose();
-    await _remoteStream?.dispose();
-    await _pc?.close();
-    _pc = null;
-    _localStream = null;
-    _remoteStream = null;
-    _pendingCandidates.clear();
+    try {
+      await _signalingChannel?.unsubscribe();
+      _localStream?.getTracks().forEach((t) => t.stop());
+      await _localStream?.dispose();
+      await _remoteStream?.dispose();
+      await _pc?.close();
+    } finally {
+      _pc = null;
+      _localStream = null;
+      _remoteStream = null;
+      _pendingCandidates.clear();
+      _disposed = false;
+    }
   }
 }

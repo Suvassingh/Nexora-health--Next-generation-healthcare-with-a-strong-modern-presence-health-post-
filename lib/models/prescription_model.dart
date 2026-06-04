@@ -1,7 +1,3 @@
-
-
-
-
 class PrescriptionItem {
   final String medicineName;
   final String? dosage;

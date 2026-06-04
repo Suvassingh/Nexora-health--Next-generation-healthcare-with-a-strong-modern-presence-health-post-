@@ -103,9 +103,13 @@ class DAppt {
     _ => status,
   };
 
-  /// Factory for API response from `ApiService.getMyAppointments()` (doctor side)
   factory DAppt.fromApi(Map<String, dynamic> json) {
     final profile = json['user_profiles'] as Map<String, dynamic>? ?? {};
+
+    print(
+      ' patient_id raw: ${json['patient_id']} (${json['patient_id'].runtimeType})',
+    );
+    print('Appointment JSON: $json');
     return DAppt(
       id: json['id']?.toString() ?? '',
       patientId: json['patient_id']?.toString() ?? '',

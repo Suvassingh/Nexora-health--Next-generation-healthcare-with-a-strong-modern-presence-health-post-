@@ -30,7 +30,7 @@ class AppLocalizationsNe extends AppLocalizations {
   String get bookAppointment => 'अपोइन्टमेन्ट बुक गर्नुहोस्';
 
   @override
-  String get doctor => 'चिकित्सक';
+  String get doctor => 'डाक्टर';
 
   @override
   String get patient => 'बिरामी';
@@ -186,7 +186,7 @@ class AppLocalizationsNe extends AppLocalizations {
   String get callFailed => 'कल असफल भयो';
 
   @override
-  String get pending => 'बाँकी';
+  String get pending => 'पेन्डिङ';
 
   @override
   String get today => 'आज';
@@ -213,7 +213,7 @@ class AppLocalizationsNe extends AppLocalizations {
   String get cancelledAppearsHere => 'रद्द गरिएका अपोइन्टमेन्टहरू यहाँ देखिनेछन्';
 
   @override
-  String get retry => 'पुनः प्रयास गर्नुहोस्';
+  String get retry => 'पुन: प्रयास गर्नुहोस्';
 
   @override
   String get connecting => 'जडान हुँदैछ...';
@@ -550,7 +550,7 @@ class AppLocalizationsNe extends AppLocalizations {
   String get specialtyRequired => 'विशेषज्ञता आवश्यक छ';
 
   @override
-  String get qualificationRequired => 'योग्यता आवश्यक छ';
+  String get qualificationRequired => 'योग्यता आवश्यक छ (जस्तै MBBS, MD)';
 
   @override
   String get selectHealthpost => 'स्वास्थ्य चौकी छान्नुहोस्';
@@ -619,16 +619,16 @@ class AppLocalizationsNe extends AppLocalizations {
   String get accountInfo => 'खाता जानकारी';
 
   @override
-  String get signUpFailed => 'दर्ता असफल भयो';
+  String get signUpFailed => 'साइन अप असफल भयो';
 
   @override
-  String get incompleteProfile => 'प्रोफाइल पूरा छैन';
+  String get incompleteProfile => 'कृपया सबै आवश्यक विवरणहरू भर्नुहोस्।';
 
   @override
   String get nameRequired => 'नाम आवश्यक छ';
 
   @override
-  String get phoneRequired => 'फोन आवश्यक छ';
+  String get phoneRequired => 'फोन नम्बर आवश्यक छ';
 
   @override
   String get ageRequired => 'उमेर आवश्यक छ';
@@ -637,7 +637,7 @@ class AppLocalizationsNe extends AppLocalizations {
   String get genderRequired => 'लिङ्ग आवश्यक छ';
 
   @override
-  String get passwordMinSix => 'पासवर्ड कम्तीमा ६ अक्षर हुनुपर्छ';
+  String get passwordMinSix => 'पासवर्ड कम्तीमा ६ अक्षरको हुनुपर्छ';
 
   @override
   String get passwordMismatch => 'पासवर्ड मिलेन';
@@ -680,31 +680,31 @@ class AppLocalizationsNe extends AppLocalizations {
   }
 
   @override
-  String get sessionExpired => 'सत्र समाप्त भयो';
+  String get sessionExpired => 'सेसन समाप्त भयो';
 
   @override
-  String get profileSetupIncomplete => 'प्रोफाइल सेटअप अधूरो छ';
+  String get profileSetupIncomplete => 'प्रोफाइल पूरा भएको छैन';
 
   @override
-  String get doctorDetailsMissing => 'चिकित्सकको विवरण छैन';
+  String get doctorDetailsMissing => 'डाक्टर विवरण हराइरहेको छ';
 
   @override
   String get couldNotLoadProfile => 'प्रोफाइल लोड गर्न सकिएन';
 
   @override
-  String get profileNotSavedDuringSignup => 'साइनअपको क्रममा प्रोफाइल डेटा सुरक्षित भएन।\nसाइन आउट गरी पुनः दर्ता गर्नुहोस्।';
+  String get profileNotSavedDuringSignup => 'दर्ताको क्रममा प्रोफाइल सेभ भएन।';
 
   @override
-  String get doctorRegistrationIncomplete => 'चिकित्सक दर्ता अधूरो छ।\nआफ्नो प्रशासकलाई सम्पर्क गर्नुहोस्।';
+  String get doctorRegistrationIncomplete => 'डाक्टर दर्ता अधुरो छ।';
 
   @override
-  String get sessionExpiredMessage => 'तपाईंको सत्र समाप्त भयो। कृपया पुनः लगइन गर्नुहोस्।';
+  String get sessionExpiredMessage => 'तपाईंको सेसन समाप्त भएको छ। कृपया फेरि लगइन गर्नुहोस्।';
 
   @override
   String get goToLogin => 'लगइनमा जानुहोस्';
 
   @override
-  String get signOutAndReregister => 'साइन आउट गरी पुनः दर्ता गर्नुहोस्';
+  String get signOutAndReregister => 'लगआउट गरेर पुनः दर्ता गर्नुहोस्';
 
   @override
   String get nmcPrefix => 'NMC नं.';
@@ -734,10 +734,10 @@ class AppLocalizationsNe extends AppLocalizations {
   String get todaysPatients => 'आजका बिरामी';
 
   @override
-  String get statPending => 'Pending';
+  String get statPending => 'बाँकी';
 
   @override
-  String get statCompleted => 'Completed';
+  String get statCompleted => 'सम्पन्न';
 
   @override
   String get thisMonth => 'यो महिना';
@@ -804,4 +804,64 @@ class AppLocalizationsNe extends AppLocalizations {
 
   @override
   String get appVersion => 'संस्करण १.०.०';
+
+  @override
+  String get medicalHistory => 'चिकित्सा इतिहास';
+
+  @override
+  String get phoneInvalid => 'फोन नम्बर अमान्य';
+
+  @override
+  String get somethingWentWrong => 'केही गडबड भयो';
+
+  @override
+  String get signInFailed => 'साइन इन असफल';
+
+  @override
+  String get enterEmailForReset => 'पासवर्ड रिसेट गर्न इमेल प्रविष्ट गर्नुहोस्';
+
+  @override
+  String get invalidCredentials => 'अमान्य इमेल वा पासवर्ड';
+
+  @override
+  String get emailNotVerified => 'इमेल प्रमाणित भएन';
+
+  @override
+  String get forgotPassword => 'पासवर्ड बिर्सनुभयो?';
+
+  @override
+  String get noInternetConnection => 'इन्टरनेट जडान छैन। कृपया आफ्नो नेटवर्क जाँच गर्नुहोस्।';
+
+  @override
+  String get emailNotVerifiedTitle => 'इमेल प्रमाणित भएन';
+
+  @override
+  String get emailNotVerifiedMessage => 'लगइन गर्नुअघि कृपया आफ्नो इमेल ठेगाना प्रमाणित गर्नुहोस्। तपाईंको इनबक्समा प्रमाणीकरण लिङ्क जाँच गर्नुहोस्।';
+
+  @override
+  String get resetPassword => 'पासवर्ड रिसेट गर्नुहोस्';
+
+  @override
+  String get passwordResetSent => 'पासवर्ड रिसेट लिङ्क तपाईंको इमेलमा पठाइएको छ।';
+
+  @override
+  String get sendResetLink => 'रिसेट लिङ्क पठाउनुहोस्';
+
+  @override
+  String get send => 'send';
+
+  @override
+  String get ageMinimum18 => 'ageMinimum18';
+
+  @override
+  String get verifyEmailTitle => 'verifyEmailTitle';
+
+  @override
+  String get verifyEmailMessage => 'verifyEmailMessage';
+
+  @override
+  String get orSignInWith => 'Or SignIn With';
+
+  @override
+  String get google => 'Google';
 }

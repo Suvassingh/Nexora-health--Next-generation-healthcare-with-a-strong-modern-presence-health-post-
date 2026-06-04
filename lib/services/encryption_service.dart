@@ -109,6 +109,37 @@ class EncryptionService {
     );
     return encrypter.decrypt64(ciphertext, iv: iv);
   }
+  // encryption_service.dart
+
+  //  AES BYTE ENCRYPTION 
+
+  /// Encrypts raw bytes. Returns [12-byte IV | ciphertext].
+  static Future<Uint8List> encryptBytes(
+      Uint8List plainBytes, encrypt.Key key) async {
+    final iv = encrypt.IV.fromSecureRandom(12);
+    final encrypter = encrypt.Encrypter(
+      encrypt.AES(key, mode: encrypt.AESMode.gcm),
+    );
+    final encrypted = encrypter.encryptBytes(plainBytes, iv: iv);
+    // Prepend IV so we can extract it during decryption
+    return Uint8List.fromList([...iv.bytes, ...encrypted.bytes]);
+  }
+
+  /// Decrypts bytes produced by [encryptBytes]. Expects [12-byte IV | ciphertext].
+  static Future<Uint8List> decryptBytes(
+      Uint8List combined, encrypt.Key key) async {
+    if (combined.length < 12) throw Exception('Invalid encrypted data: too short');
+    final ivBytes = combined.sublist(0, 12);
+    final ciphertext = combined.sublist(12);
+    final encrypter = encrypt.Encrypter(
+      encrypt.AES(key, mode: encrypt.AESMode.gcm),
+    );
+    final decrypted = encrypter.decryptBytes(
+      encrypt.Encrypted(ciphertext),
+      iv: encrypt.IV(ivBytes),
+    );
+    return Uint8List.fromList(decrypted);
+  }
 }
 
 class EncryptedMessage {

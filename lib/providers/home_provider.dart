@@ -53,7 +53,7 @@ final homeDataProvider = FutureProvider<HomeData>((ref) async {
   for (var appt in monthlyAppts) {
     if (appt['scheduled_at'] != null) {
       final date = DateTime.parse(appt['scheduled_at']).toLocal();
-      final weekdayIndex = date.weekday - 1; // Monday = 0
+      final weekdayIndex = date.weekday - 1; 
       weeklyCount[weekdayIndex]++;
     }
   }

@@ -1,9 +1,6 @@
-import 'package:encrypt/encrypt.dart' as encrypt;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:healthpost_app/models/doctor_appointment.dart';
 import 'package:healthpost_app/models/doctor_chat_preview.dart';
-import 'package:healthpost_app/services/encryption_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 final chatListProvider =
@@ -13,124 +10,131 @@ AsyncNotifierProvider<ChatListNotifier, List<DoctorChatPreview>>(
 
 class ChatListNotifier extends AsyncNotifier<List<DoctorChatPreview>> {
   final _supabase = Supabase.instance.client;
-  final _secureStorage = const FlutterSecureStorage();
-
   String get _currentUserId => _supabase.auth.currentUser!.id;
 
   @override
-  Future<List<DoctorChatPreview>> build() async {
-    return _fetchChats();
-  }
+  Future<List<DoctorChatPreview>> build() => _fetchChats();
+
+
 
   Future<List<DoctorChatPreview>> _fetchChats() async {
-    final conversations = await _supabase
-        .from('conversations')
-        .select('id, patient_id, aes_key_encrypted_for_doctor')
-        .eq('doctor_id', _currentUserId);
+    final doctorRecord = await _supabase
+        .from('doctors')
+        .select('id')
+        .eq('user_id', _currentUserId)
+        .maybeSingle();
+    final doctorIdInt = doctorRecord?['id'] as int?;
+    if (doctorIdInt == null) {
+      print(' Doctor ID not found for user $_currentUserId');
+      return [];
+    }
 
-    if ((conversations as List).isEmpty) return [];
+    final appointments = await _supabase
+        .from('appointments')
+        .select('patient_id, scheduled_at, status')
+        .eq('doctor_id', doctorIdInt)
+        .inFilter('status', [
+          'confirmed',
+          'completed',
+          'no_show',
+        ]);
 
-    final patientIds = conversations
-        .map((c) => c['patient_id'] as String)
+    if (appointments.isEmpty) {
+      print(' No appointments found for doctor id $doctorIdInt');
+      return [];
+    }
+
+    final patientIds = appointments
+        .map((a) => a['patient_id'] as String)
         .toSet()
         .toList();
 
     final profiles = await _supabase
         .from('user_profiles')
-        .select('id, full_name, avatar_url')
+        .select('id, full_name, avatar_url, is_online, last_seen')
         .inFilter('id', patientIds);
-
-    final profileMap = <String, Map<String, dynamic>>{
-      for (final p in profiles as List<dynamic>)
-        (p as Map<String, dynamic>)['id'] as String: p,
+    final Map<String, Map<String, dynamic>> patientMap = {
+      for (final p in profiles) p['id'] as String: p,
     };
 
-    final privPem = await _secureStorage.read(
-      key: 'rsa_private_key_$_currentUserId',
-    );
-
-    final previews = <DoctorChatPreview>[];
-
+    final conversations = await _supabase
+        .from('conversations')
+        .select(
+          'id, patient_id, last_message_preview, last_message_at, unread_count_doctor',
+        )
+        .eq('doctor_id', _currentUserId);
+    final Map<String, Map<String, dynamic>> convMap = {};
     for (final conv in conversations) {
-      final convId = conv['id'] as String;
-      final patientId = conv['patient_id'] as String;
-      final profile = profileMap[patientId] ?? {};
-      final patientName = profile['full_name']?.toString() ?? 'Patient';
-      final avatarUrl = profile['avatar_url']?.toString();
+      convMap[conv['patient_id'] as String] = conv;
+    }
 
-      String? lastMessage;
-      DateTime? lastMessageAt;
+final nowLocal = DateTime.now();
+    final todayLocal = DateTime(nowLocal.year, nowLocal.month, nowLocal.day);
 
-      try {
-        if (privPem != null) {
-          final privKey = EncryptionService.parsePrivateKeyFromPem(privPem);
-          final aesB64 = EncryptionService.decryptWithRSA(
-            conv['aes_key_encrypted_for_doctor'] as String,
-            privKey,
+    final Map<String, DoctorChatPreview> resultMap = {};
+    for (final apt in appointments) {
+      final patientId = apt['patient_id'] as String;
+      final scheduledAt = DateTime.parse(apt['scheduled_at']).toUtc();
+ final appointmentLocal = scheduledAt.toLocal();
+      final hasToday =
+          appointmentLocal.year == todayLocal.year &&
+          appointmentLocal.month == todayLocal.month &&
+          appointmentLocal.day == todayLocal.day;
+      final profile = patientMap[patientId];
+      if (profile == null) continue;
+
+      final conversation = convMap[patientId];
+
+      if (resultMap.containsKey(patientId)) {
+        if (hasToday) {
+          final existing = resultMap[patientId]!;
+          resultMap[patientId] = DoctorChatPreview(
+            conversationId: existing.conversationId,
+            patientId: existing.patientId,
+            patientName: existing.patientName,
+            patientAvatarUrl: existing.patientAvatarUrl,
+            lastMessage: existing.lastMessage,
+            lastMessageAt: existing.lastMessageAt,
+            unreadCount: existing.unreadCount,
+            isOnline: existing.isOnline,
+            lastSeen: existing.lastSeen,
+            hasTodayAppointment: true,
           );
-          final aesKey = encrypt.Key.fromBase64(aesB64);
-
-          final lastMsg = await _supabase
-              .from('messages')
-              .select()
-              .eq('conversation_id', convId)
-              .eq('is_key_exchange', false)
-              .order('created_at', ascending: false)
-              .limit(1)
-              .maybeSingle();
-
-          if (lastMsg != null) {
-            lastMessageAt =
-                DateTime.parse(lastMsg['created_at'] as String).toLocal();
-
-            if (lastMsg['media_type'] == 'image') {
-              lastMessage = '📷 Photo';
-            } else if (lastMsg['media_type'] == 'video') {
-              lastMessage = ' Video';
-            } else if (lastMsg['encrypted_content'] != null) {
-              lastMessage = EncryptionService.decryptWithAES(
-                lastMsg['encrypted_content'] as String,
-                aesKey,
-                lastMsg['iv'] as String,
-              );
-            }
-          }
         }
-      } catch (_) {
-        lastMessage = ' Encrypted message';
+        continue;
       }
 
-      final appt = DAppt(
-        id: convId,
+      resultMap[patientId] = DoctorChatPreview(
+        conversationId: conversation?['id'] as String? ?? '',
         patientId: patientId,
-        patientName: patientName,
-        patientAvatarUrl: avatarUrl,
-        scheduledAt: DateTime.now(),
-        status: 'confirmed',
-        consultType: 'chat',
-      );
-
-      previews.add(
-        DoctorChatPreview(
-          appt: appt,
-          conversationId: convId,
-          lastMessage: lastMessage,
-          lastMessageAt: lastMessageAt,
-        ),
+        patientName: profile['full_name'] ?? 'Patient',
+        patientAvatarUrl: profile['avatar_url'] as String?,
+        lastMessage: conversation?['last_message_preview'] as String?,
+        lastMessageAt: conversation?['last_message_at'] != null
+            ? DateTime.parse(conversation!['last_message_at'])
+            : null,
+        unreadCount: conversation?['unread_count_doctor'] ?? 0,
+        isOnline: profile['is_online'] ?? false,
+        lastSeen: profile['last_seen'] != null
+            ? DateTime.parse(profile['last_seen'])
+            : null,
+        hasTodayAppointment: hasToday,
       );
     }
 
-    previews.sort((a, b) {
-      if (a.lastMessageAt == null && b.lastMessageAt == null) return 0;
-      if (a.lastMessageAt == null) return 1;
-      if (b.lastMessageAt == null) return -1;
-      return b.lastMessageAt!.compareTo(a.lastMessageAt!);
+    final result = resultMap.values.toList();
+    result.sort((a, b) {
+      if (a.hasTodayAppointment != b.hasTodayAppointment)
+        return a.hasTodayAppointment ? -1 : 1;
+      if (a.lastMessageAt != null && b.lastMessageAt != null)
+        return b.lastMessageAt!.compareTo(a.lastMessageAt!);
+      if (a.lastMessageAt != null) return -1;
+      if (b.lastMessageAt != null) return 1;
+      return a.patientName.compareTo(b.patientName);
     });
-
-    return previews;
+    return result;
   }
 
-  // Call this to refresh — from pull-to-refresh or after returning from ChatScreen
   Future<void> refresh() async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(_fetchChats);

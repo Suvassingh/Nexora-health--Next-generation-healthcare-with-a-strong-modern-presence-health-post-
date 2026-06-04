@@ -1,3 +1,4 @@
+
 import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -20,638 +21,153 @@ import 'package:healthpost_app/widgets/login_signup_button.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
-class SignupScreen extends StatefulWidget {
-  const SignupScreen({super.key});
-
-  @override
-  State<SignupScreen> createState() => _SignupScreenState();
-}
-
-class _SignupScreenState extends State<SignupScreen>
-    with SingleTickerProviderStateMixin {
-  final ConnectivityController controller = Get.put(ConnectivityController());
-
-  final nameController = TextEditingController();
-  final phoneController = TextEditingController();
-  final ageController = TextEditingController();
-
-  String? _selectedProvince;
-  String? _selectedDistrict;
-  String? _selectedMunicipality;
-
-  final licenseNumberController = TextEditingController();
-  final qualificationController = TextEditingController();
-  final experienceYearsController = TextEditingController();
-  List<Map<String, dynamic>> _allHealthposts = [];
-  List<Map<String, dynamic>> _filteredHealthposts = [];
-  Map<String, dynamic>? _selectedHealthpost;
-  bool _loadingHealthposts = false;
-  bool _healthpostsLoaded = false;
-  String? _healthpostError;
-  final _hpSearchCtrl = TextEditingController();
-  final emailcontroller = TextEditingController();
-  final passwordcontroller = TextEditingController();
-  final confirmPasswordController = TextEditingController();
-
-  String? selectedGender;
-  String? selectedSpecialty;
-
-  bool loading = false;
-
-  late TabController tabController;
+//  GETX CONTROLLER
+class SignupController extends GetxController {
   final supabase = Supabase.instance.client;
 
-  static const List<String> _specialties = ['General Physician'];
- late final displayed = _filteredHealthposts;
+  // TextEditingControllers
+  final nameCtrl = TextEditingController();
+  final phoneCtrl = TextEditingController();
+  final emailCtrl = TextEditingController();
+  final passwordCtrl = TextEditingController();
+  final confirmPwdCtrl = TextEditingController();
+  final licenseCtrl = TextEditingController();
+  final qualificationCtrl = TextEditingController();
+  final experienceCtrl = TextEditingController();
 
-  String get _addressForDb {
-    final parts = [
-      if (_selectedMunicipality != null && _selectedMunicipality!.isNotEmpty)
-        _selectedMunicipality!,
-      if (_selectedDistrict != null) _selectedDistrict!,
-      if (_selectedProvince != null) _selectedProvince!,
-    ];
-    return parts.join(', ');
+  // Reactive variables
+  final selectedGender = Rx<String?>(null);
+  final selectedSpecialty = Rx<String?>(null);
+  final selectedProvince = Rx<String?>(null);
+  final selectedDistrict = Rx<String?>(null);
+  final selectedMunicipality = Rx<String?>(null);
+  final selectedHealthpost = Rx<Map<String, dynamic>?>(null);
+  final isLoading = false.obs;
+  final selectedDob = Rx<DateTime?>(null);
+
+  // For healthpost search
+  final allHealthposts = <Map<String, dynamic>>[].obs;
+  final filteredHealthposts = <Map<String, dynamic>>[].obs;
+  final loadingHealthposts = false.obs;
+  final healthpostError = Rx<String?>(null);
+  final hpSearchCtrl = TextEditingController();
+
+  final TabController? tabController;
+  bool _isSigningUp = false;
+  DateTime _lastHealthpostFetch = DateTime(2000);
+
+  SignupController(this.tabController);
+
+  static const List<String> specialties = ['General Physician'];
+
+  
+  //  Validation helpers
+  
+  String? validateEmail(String email) {
+    if (email.isEmpty) return 'emailRequired';
+    final regex = RegExp(r'^[^@]+@[^@]+\.[^@]+');
+    if (!regex.hasMatch(email)) return 'invalidEmail';
+    return null;
   }
 
-  Future<void> _fetchHealthposts({bool forceRefresh = false}) async {
-    if (_healthpostsLoaded && !forceRefresh) return;
+  // Relaxed phone validation: any 10-digit number after cleaning
+  String? validatePhone(String phone) {
+    if (phone.isEmpty) return 'phoneRequired';
+    final digitsOnly = phone.replaceAll(RegExp(r'[^\d]'), '');
+    if (digitsOnly.length != 10) return 'phoneInvalidLength';
+    return null;
+  }
 
-    setState(() {
-      _loadingHealthposts = true;
-      _healthpostError = null;
-    });
+  String? validatePassword(String pwd) {
+    if (pwd.length < 6) return 'passwordMinSix';
+    return null;
+  }
 
-    try {
-      final res = await supabase
-          .from('healthposts')
-          .select('id, name, district, municipality, ward')
-          .eq('is_active', true)
-          .order('name');
-
-      _allHealthposts = (res as List).cast<Map<String, dynamic>>();
-      _filteredHealthposts = List.from(_allHealthposts);
-      _healthpostsLoaded = true;          
-      _healthpostError = null;
-    } catch (e) {
-      _healthpostsLoaded = false;         
-      _healthpostError = AppLocalizations.of(context)!.couldNotLoadHealthposts;
-      debugPrint('[Healthpost] fetch error: $e');
-    } finally {
-      if (mounted) setState(() => _loadingHealthposts = false);
+  bool validatePersonalFields(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    String? error;
+    if (nameCtrl.text.trim().isEmpty) {
+      error = l.nameRequired;
+    } else if ((error = validatePhone(phoneCtrl.text.trim())) != null) {
+      error = error == 'phoneRequired' ? l.phoneRequired : l.phoneInvalid;
+    } else if (selectedDob.value == null) {
+      error = l.ageRequired;
+    } else if (selectedGender.value == null) {
+      error = l.genderRequired;
+    } else if (selectedProvince.value == null) {
+      error = l.provinceRequired;
+    } else if (selectedDistrict.value == null) {
+      error = l.districtRequired;
     }
+
+    // Enforce minimum age 18
+    if (selectedDob.value != null) {
+      final age = DateTime.now().difference(selectedDob.value!).inDays ~/ 365;
+      if (age < 18) error = l.ageMinimum18;
+    }
+
+    if (error != null) {
+      _snackError(context, error);
+      return false;
+    }
+    return true;
   }
 
+  bool validateDoctorFields(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    String? error;
+    if (licenseCtrl.text.trim().isEmpty) {
+      error = l.nmcLicenseRequired;
+    } else if (selectedSpecialty.value == null) {
+      error = l.specialtyRequired;
+    } else if (qualificationCtrl.text.trim().isEmpty) {
+      error = l.qualificationRequired;
+    } else if (selectedHealthpost.value == null) {
+      error = l.healthpostRequired;
+    }
 
-  void _filterHealthposts(String query) {
-    final q = query.toLowerCase().trim();
-    setState(() {
-      _filteredHealthposts = q.isEmpty
-          ? List.from(_allHealthposts)
-          : _allHealthposts.where((h) {
-        final name = (h['name'] as String? ?? '').toLowerCase();
-        final district = (h['district'] as String? ?? '').toLowerCase();
-        final muni = (h['municipality'] as String? ?? '').toLowerCase();
-        return name.contains(q) ||
-            district.contains(q) ||
-            muni.contains(q);
-      }).toList();
-    });
+    if (error != null) {
+      _snackError(context, error);
+      return false;
+    }
+    return true;
   }
 
-  Future<void> _openHealthpostPicker() async {
- 
-    await _fetchHealthposts();
-    if (!mounted) return;
-    _hpSearchCtrl.clear();
-    _filteredHealthposts = List.from(_allHealthposts);
+  bool validateAccountFields(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    String? error;
+    if ((error = validateEmail(emailCtrl.text.trim())) != null) {
+      _snackError(
+        context,
+        error == 'emailRequired' ? l.emailRequired : l.invalidEmail,
+      );
+      return false;
+    }
+    if ((error = validatePassword(passwordCtrl.text)) != null) {
+      _snackError(
+        context,
+        error == 'passwordMinSix' ? l.passwordMinSix : l.passwordRequired,
+      );
+      return false;
+    }
+    if (passwordCtrl.text != confirmPwdCtrl.text) {
+      _snackError(context, l.passwordMismatch);
+      return false;
+    }
+    return true;
+  }
 
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setModal) {
-          
-          void filterAndUpdate(String q) {
-            final lower = q.toLowerCase().trim();
-            final filtered = lower.isEmpty
-                ? List<Map<String, dynamic>>.from(_allHealthposts)
-                : _allHealthposts.where((h) {
-              final name = (h['name'] as String? ?? '').toLowerCase();
-              final dist = (h['district'] as String? ?? '').toLowerCase();
-              final muni =
-              (h['municipality'] as String? ?? '').toLowerCase();
-              return name.contains(lower) ||
-                  dist.contains(lower) ||
-                  muni.contains(lower);
-            }).toList();
-            setModal(() => _filteredHealthposts = filtered);
-          }
-
-          return DraggableScrollableSheet(
-            initialChildSize: 0.75,
-            maxChildSize: 0.95,
-            minChildSize: 0.5,
-            expand: false,
-            builder: (_, scrollCtrl) => Column(
-              children: [
-                // Drag handle
-                Container(
-                  margin: const EdgeInsets.symmetric(vertical: 10),
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-
-                // Header row
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-                  child: Row(
-                    children: [
-                      Icon(Icons.local_hospital,
-                          color: AppConstants.primaryColor, size: 20),
-                      const SizedBox(width: 8),
-                      Text(AppLocalizations.of(context)!.selectHealthpost, 
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: AppConstants.primaryColor,
-                        ),
-                      ),
-                      const Spacer(),
-                      // Retry button shown only on error
-                      if (_healthpostError != null)
-                        TextButton.icon(
-                          onPressed: () async {
-                            setModal(() {
-                              _loadingHealthposts = true;
-                              _healthpostError = null;
-                            });
-                            try {
-                              final res = await supabase
-                                  .from('healthposts')
-                                  .select('id, name, district, municipality, ward')
-                                  .eq('is_active', true)
-                                  .order('name');
-                              _allHealthposts = (res as List).cast<Map<String, dynamic>>();
-                              setModal(() {
-                                _filteredHealthposts = List.from(_allHealthposts);
-                                _loadingHealthposts = false;
-                                _healthpostError = null;
-                              });
-                            } catch (e) {
-                              setModal(() {
-                                _loadingHealthposts = false;
-                                _healthpostError = 'Could not load healthposts. Tap to retry.';
-
-                              });
-
-                            }
-
-                          },
-                          icon: const Icon(Icons.refresh, size: 16),
-                          label: Text(AppLocalizations.of(context)!.retry),
-
-                          style: TextButton.styleFrom(
-                            foregroundColor: AppConstants.primaryColor,
-                          ),
-                        ),
-                      // Count badge
-                      if (_healthpostError == null && !_loadingHealthposts)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppConstants.primaryColor.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            '${displayed.length} ${AppLocalizations.of(context)!.found}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppConstants.primaryColor,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-
-                // Search field
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  child: TextField(
-                    controller: _hpSearchCtrl,
-                    autofocus: _healthpostsLoaded && _healthpostError == null,
-                    enabled: !_loadingHealthposts && _healthpostError == null,
-                    decoration: InputDecoration(
-                      hintText: AppLocalizations.of(context)!.searchHealthpost,
-
-                      prefixIcon: const Icon(Icons.search, size: 20),
-                      suffixIcon: ValueListenableBuilder(
-                        valueListenable: _hpSearchCtrl,
-                        builder: (_, v, __) => v.text.isNotEmpty
-                            ? IconButton(
-                          icon: const Icon(Icons.clear, size: 18),
-                          onPressed: () {
-                            _hpSearchCtrl.clear();
-                            filterAndUpdate('');
-                          },
-                        )
-                            : const SizedBox.shrink(),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 10),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10)),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide:
-                        BorderSide(color: Colors.grey.shade300),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(
-                            color: AppConstants.primaryColor, width: 1.5),
-                      ),
-                    ),
-                    onChanged: filterAndUpdate, 
-                  ),
-                ),
-
-                const Divider(height: 1),
-
-                Expanded(
-                  child: _loadingHealthposts
-                      ?  Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircularProgressIndicator(),
-                        SizedBox(height: 12),
-                        Text(AppLocalizations.of(context)!.loadingHealthposts,                             style: TextStyle(color: Colors.black54)),
-                      ],
-                    ),
-                  )
-                      : _healthpostError != null
-                      ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.cloud_off,
-                            size: 48,
-                            color: Colors.grey.shade400),
-                        const SizedBox(height: 12),
-                        Text(
-                          _healthpostError!,
-                          style: TextStyle(
-                              color: Colors.grey.shade600),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  )
-                      : _filteredHealthposts.isEmpty
-                      ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.search_off,
-                            size: 48,
-                            color: Colors.grey.shade400),
-                        const SizedBox(height: 8),
-                        Text(AppLocalizations.of(context)!.noHealthpostsFound,
-                          style: TextStyle(
-                              color: Colors.grey.shade500),
-                        ),
-                      ],
-                    ),
-                  )
-                      : ListView.separated(
-                    controller: scrollCtrl,
-                    itemCount: _filteredHealthposts.length,
-                    separatorBuilder: (_, __) =>
-                    const Divider(height: 1, indent: 60),
-                    itemBuilder: (_, i) {
-                      final hp = _filteredHealthposts[i];
-                      final isSelected =
-                          _selectedHealthpost?['id'] ==
-                              hp['id'];
-                      final sub = [
-                        hp['municipality'],
-                        hp['district']
-                      ]
-                          .where((e) =>
-                      e != null &&
-                          (e as String).isNotEmpty)
-                          .join(', ');
-
-                      return ListTile(
-                        contentPadding:
-                        const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 4),
-                        leading: CircleAvatar(
-                          backgroundColor: isSelected
-                              ? AppConstants.primaryColor
-                              : AppConstants.primaryColor
-                              .withOpacity(0.08),
-                          child: Icon(
-                            Icons.local_hospital_outlined,
-                            size: 18,
-                            color: isSelected
-                                ? Colors.white
-                                : AppConstants.primaryColor,
-                          ),
-                        ),
-                        title: Text(
-                          hp['name'] ?? '',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: isSelected
-                                ? AppConstants.primaryColor
-                                : Colors.black87,
-                          ),
-                        ),
-                        subtitle: sub.isNotEmpty
-                            ? Text(sub,
-                            style: const TextStyle(
-                                fontSize: 12))
-                            : null,
-                        trailing: isSelected
-                            ? Icon(Icons.check_circle_rounded,
-                            color: AppConstants.primaryColor)
-                            : Icon(Icons.chevron_right,
-                            color: Colors.grey.shade400,
-                            size: 20),
-                        onTap: () {
-                          setState(
-                                  () => _selectedHealthpost = hp);
-                          Navigator.pop(ctx);
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
+  void _snackError(BuildContext context, String message) {
+    Get.snackbar(
+      AppLocalizations.of(context)!.error,
+      message,
+      backgroundColor: Colors.redAccent,
+      colorText: Colors.white,
     );
   }
 
-  Future<void> signUp() async {
-    if (!_validatePersonalFields()) return;
-    if (!_validateDoctorFields()) return;
-    if (!_validateAccountFields()) return;
-
-    final l = AppLocalizations.of(context)!; 
-    setState(() => loading = true);
-    try {
-      final result = await supabase.auth.signUp(
-        email: emailcontroller.text.trim(),
-        password: passwordcontroller.text,
-      );
-
-      if (result.user == null) {
-              Get.snackbar(l.error, l.signUpFailed,
-          backgroundColor: Colors.redAccent,
-          colorText: Colors.white,
-        );
-        return;
-      }
-
-      final userId = result.user!.id;
-
-      await _saveUserProfile(userId: userId);
-
-      await _saveDoctorProfile(userId: userId);
-
-         Get.snackbar(l.success, l.doctorAccountCreated,
-        backgroundColor: Colors.green.shade100,
-        duration: const Duration(seconds: 2),
-      );
-      await Future.delayed(const Duration(seconds: 2));
-      Get.offAll(() => LoginScreen());
-    } on AuthException catch (e) {
-          Get.snackbar(l.signUpFailed, _authErrorMessage(e.message), 
-        backgroundColor: Colors.red.shade100,
-      );
-    } catch (e) {
-         Get.snackbar(l.signUpFailed, e.toString(),
-        backgroundColor: Colors.redAccent,
-      );
-    } finally {
-      if (mounted) setState(() => loading = false);
-    }
-  }
-
-  Future<void> continueWithGoogle() async {
-    final l = AppLocalizations.of(context)!; 
-    setState(() => loading = true);
-    try {
-      final signIn = GoogleSignIn.instance;
-      await signIn.initialize(
-        serverClientId: dotenv.env['web_clientid'],
-        clientId: Platform.isAndroid
-            ? dotenv.env['android_clientid']
-            : dotenv.env['ios_clientid'],
-      );
-
-      final account = await signIn.authenticate();
-      final idToken = account.authentication.idToken ?? '';
-      final authorization =
-          await account.authorizationClient.authorizationForScopes([
-            'email',
-            'profile',
-          ]) ??
-          await account.authorizationClient.authorizeScopes([
-            'email',
-            'profile',
-          ]);
-
-      final result = await supabase.auth.signInWithIdToken(
-        provider: OAuthProvider.google,
-        idToken: idToken,
-        accessToken: authorization.accessToken,
-      );
-
-      if (result.user == null) return;
-
-      final userId = result.user!.id;
-      final googleName =
-          result.user!.userMetadata?['full_name'] ??
-          result.user!.userMetadata?['name'] ??
-          '';
-      final googleAvatar = result.user!.userMetadata?['avatar_url'] ?? '';
-
-      await supabase.from('user_profiles').upsert({
-        'id': userId,
-        'full_name': nameController.text.trim().isNotEmpty
-            ? nameController.text.trim()
-            : googleName,
-        'phone': phoneController.text.trim().isNotEmpty
-            ? _formatPhone(phoneController.text.trim())
-            : null,
-        'role': 'doctor',
-        'preferred_language': 'nepali',
-        'avatar_url': googleAvatar,
-        'email': result.user!.email ?? '',
-        'municipality': _selectedMunicipality ?? '',
-        'district': _selectedDistrict ?? '',
-        'province': _selectedProvince ?? '',
-        'updated_at': DateTime.now().toIso8601String(),
-      }, onConflict: 'id');
-
-      await _saveDoctorProfile(userId: userId);
-
-      final hasCompleteProfile =
-          nameController.text.trim().isNotEmpty &&
-          licenseNumberController.text.trim().isNotEmpty;
-
-      Get.offAll(() => HomeScreen());
-
-      if (!hasCompleteProfile) {
-            Get.snackbar(l.incompleteProfile, l.completeDoctorProfileHint,
-          backgroundColor: Colors.orange.shade100,
-          duration: const Duration(seconds: 4),
-        );
-      }
-    } catch (e) {
-      Get.snackbar(
-        AppLocalizations.of(context)!.googleSignInFailed,
-        e.toString(),
-      );
-      logger(
-        e.toString(),
-        'SignupScreen.continueWithGoogle',
-        level: Level.info,
-      );
-    } finally {
-      if (mounted) setState(() => loading = false);
-    }
-  }
-
-  Future<void> _saveUserProfile({required String userId}) async {
-    await supabase.from('user_profiles').upsert({
-      'id': userId,
-      'full_name': nameController.text.trim(),
-      'phone': _formatPhone(phoneController.text.trim()),
-      'role': 'doctor',
-      'preferred_language': 'nepali',
-      'email': emailcontroller.text.trim(),
-      'gender': _mapGender(selectedGender),
-      'date_of_birth': _ageToDateOfBirth(ageController.text.trim()),
-      "province": _selectedProvince ?? "",
-      "district": _selectedDistrict ?? "",
-      'municipality': _selectedMunicipality ?? '',
-      'updated_at': DateTime.now().toIso8601String(),
-    }, onConflict: 'id');
-  }
-
-  Future<void> _saveDoctorProfile({required String userId}) async {
-    final data = <String, dynamic>{
-      'user_id': userId,
-      'specialty': selectedSpecialty ?? '',
-      'license_number': licenseNumberController.text.trim(),
-      'qualification': qualificationController.text.trim(),
-      'healthpost_id': _selectedHealthpost?['id'],
-      'healthpost_name': _selectedHealthpost?['name'] ?? '',
-      'updated_at': DateTime.now().toIso8601String(),
-    };
-
-    final expYears = int.tryParse(experienceYearsController.text.trim());
-    if (expYears != null) data['experience_years'] = expYears;
-
-    await supabase.from('doctors').upsert(data, onConflict: 'user_id');
-  }
-
-  bool _validatePersonalFields() {
-    final l = AppLocalizations.of(context)!;
-
-    if (nameController.text.trim().isEmpty) {
-_snackError(l.nameRequired);
-      return false;
-    }
-    if (phoneController.text.trim().isEmpty) {
-     _snackError(l.phoneRequired);
-
-      return false;
-    }
-    if (ageController.text.trim().isEmpty) {
-     _snackError(l.ageRequired);
-      return false;
-    }
-    if (selectedGender == null) {
-      _snackError(l.genderRequired);
-      return false;
-    }
-    if (_selectedProvince == null) {
-      _snackError(l.provinceRequired);
-      return false;
-    }
-    if (_selectedDistrict == null) {
-      _snackError(l.districtRequired);
-      return false;
-    }
-    return true;
-  }
-
-  bool _validateDoctorFields() {
-    final l = AppLocalizations.of(context)!;
-
-    if (licenseNumberController.text.trim().isEmpty) {
-      _snackError(l.nmcLicenseRequired);
-
-      return false;
-    }
-    if (selectedSpecialty == null || selectedSpecialty!.isEmpty) {
-_snackError(l.specialtyRequired);
-      return false;
-    }
-   if (qualificationController.text.trim().isEmpty) {
-      _snackError(l.qualificationRequired);
-      return false;
-    }
-    if (_selectedHealthpost == null) {
-     _snackError(l.healthpostRequired);
-
-      return false;
-    }
-    return true;
-  }
-
-  bool _validateAccountFields() {
-        final l = AppLocalizations.of(context)!;
-
-    if (emailcontroller.text.trim().isEmpty) {
-_snackError(l.emailRequired);
-      return false;
-    }
-    if (passwordcontroller.text.length < 6) {
-     _snackError(l.passwordMinSix);
-
-      return false;
-    }
-    if (passwordcontroller.text != confirmPasswordController.text) {
-_snackError(l.passwordMismatch);
-      return false;
-    }
-    return true;
-  }
-
-  void _snackError(String message) => Get.snackbar(AppLocalizations.of(context)!.error, message,
-    backgroundColor: Colors.redAccent,
-    colorText: Colors.white,
-  );
+  
+  //  Data formatting
 
   String _formatPhone(String phone) {
     phone = phone.replaceAll(' ', '').replaceAll('-', '');
@@ -669,151 +185,430 @@ _snackError(l.passwordMismatch);
     return 'other';
   }
 
-  String? _ageToDateOfBirth(String ageStr) {
-    final age = int.tryParse(ageStr);
-    if (age == null) return null;
-    return '${DateTime.now().year - age}-01-01';
+  
+  //  Healthpost fetching & filtering 
+  
+  Future<void> fetchHealthposts({bool forceRefresh = false}) async {
+    final now = DateTime.now();
+    if (!forceRefresh &&
+        allHealthposts.isNotEmpty &&
+        now.difference(_lastHealthpostFetch).inMinutes < 5)
+      return;
+    loadingHealthposts.value = true;
+    healthpostError.value = null;
+    try {
+      final res = await supabase
+          .from('healthposts')
+          .select('id, name, district, municipality, ward')
+          .eq('is_active', true)
+          .order('name');
+      allHealthposts.value = List<Map<String, dynamic>>.from(res);
+      filteredHealthposts.value = List.from(allHealthposts);
+      _lastHealthpostFetch = now;
+    } catch (e) {
+      healthpostError.value =
+          AppLocalizations.of(Get.context!)?.couldNotLoadHealthposts ??
+          'Could not load healthposts';
+      debugPrint('[Healthpost] fetch error: $e');
+    } finally {
+      loadingHealthposts.value = false;
+    }
   }
 
-  String _authErrorMessage(String message) {
+  void filterHealthposts(String query) {
+    final q = query.toLowerCase().trim();
+    if (q.isEmpty) {
+      filteredHealthposts.value = List.from(allHealthposts);
+    } else {
+      filteredHealthposts.value = allHealthposts.where((h) {
+        final name = (h['name'] as String? ?? '').toLowerCase();
+        final district = (h['district'] as String? ?? '').toLowerCase();
+        final muni = (h['municipality'] as String? ?? '').toLowerCase();
+        return name.contains(q) || district.contains(q) || muni.contains(q);
+      }).toList();
+    }
+  }
+  //  Sign up flows
+  Future<void> signUp(BuildContext context) async {
+    if (_isSigningUp) return;
+    if (!validatePersonalFields(context)) return;
+    if (!validateDoctorFields(context)) return;
+    if (!validateAccountFields(context)) return;
+
+    // Check connectivity before network call
+    final connectivity = await Connectivity().checkConnectivity();
+    if (connectivity == ConnectivityResult.none) {
+      Get.snackbar(
+        AppLocalizations.of(context)!.error,
+        AppLocalizations.of(context)!.noInternetConnection,
+      );
+      return;
+    }
+
+    _isSigningUp = true;
     final l = AppLocalizations.of(context)!;
+    isLoading.value = true;
+    try {
+      final result = await supabase.auth.signUp(
+        email: emailCtrl.text.trim(),
+        password: passwordCtrl.text,
+        emailRedirectTo: 'com.example.healthpost_app://login-callback/',
+      );
+      if (result.user == null) {
+        Get.snackbar(
+          l.error,
+          l.signUpFailed,
+          backgroundColor: Colors.redAccent,
+          colorText: Colors.white,
+        );
+        return;
+      }
+      final userId = result.user!.id;
+      await _saveUserProfile(userId: userId);
+      await _saveDoctorProfile(userId: userId);
+      await supabase.auth.signOut();
 
-    if (message.contains('already registered')) {
-      return l.emailAlreadyRegistered;
+      Get.snackbar(
+        l.verifyEmailTitle,
+        l.verifyEmailMessage,
+        backgroundColor: Colors.green.shade100,
+        duration: const Duration(seconds: 5),
+      );
+      Get.offAll(() => LoginScreen());
+    } on AuthException catch (e) {
+      Get.snackbar(
+        l.signUpFailed,
+        _authErrorMessage(e.message, l),
+        backgroundColor: Colors.red.shade100,
+      );
+    } catch (e) {
+      Get.snackbar(
+        l.signUpFailed,
+        l.somethingWentWrong,
+        backgroundColor: Colors.redAccent,
+      );
+    } finally {
+      isLoading.value = false;
+      _isSigningUp = false;
     }
-  if (message.contains('invalid email')) {
-      return l.invalidEmail;
-    }
-    return message;
   }
+
+  Future<void> continueWithGoogle(BuildContext context) async {
+    if (_isSigningUp) return;
+    _isSigningUp = true;
+    final l = AppLocalizations.of(context)!;
+    isLoading.value = true;
+    try {
+      final signIn = GoogleSignIn.instance;
+      await signIn.initialize(
+        serverClientId: dotenv.env['web_clientid'],
+        clientId: Platform.isAndroid
+            ? dotenv.env['android_clientid']
+            : dotenv.env['ios_clientid'],
+      );
+      final account = await signIn.authenticate();
+      final idToken = account.authentication.idToken ?? '';
+      final result = await supabase.auth.signInWithIdToken(
+        provider: OAuthProvider.google,
+        idToken: idToken,
+      );
+      if (result.user == null) return;
+      final userId = result.user!.id;
+      final googleName =
+          result.user!.userMetadata?['full_name'] ??
+          result.user!.userMetadata?['name'] ??
+          '';
+      final googleAvatar = result.user!.userMetadata?['avatar_url'] ?? '';
+
+      await supabase.from('user_profiles').upsert({
+        'id': userId,
+        'full_name': nameCtrl.text.trim().isNotEmpty
+            ? nameCtrl.text.trim()
+            : googleName,
+        'phone': phoneCtrl.text.trim().isNotEmpty
+            ? _formatPhone(phoneCtrl.text.trim())
+            : null,
+        'role': 'doctor',
+        'preferred_language': 'nepali',
+        'avatar_url': googleAvatar,
+        'email': result.user!.email ?? '',
+        'municipality': selectedMunicipality.value ?? '',
+        'district': selectedDistrict.value ?? '',
+        'province': selectedProvince.value ?? '',
+        'updated_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'id');
+
+      if (!validateDoctorFields(context)) {
+        await supabase.auth.signOut();
+        Get.snackbar(
+          l.incompleteProfile,
+          l.completeDoctorProfileHint,
+          backgroundColor: Colors.orange,
+        );
+        isLoading.value = false;
+        _isSigningUp = false;
+        return;
+      }
+      await _saveDoctorProfile(userId: userId);
+      Get.offAll(() => HomeScreen());
+    } catch (e) {
+      Get.snackbar(l.googleSignInFailed, l.somethingWentWrong);
+      logger(
+        e.toString(),
+        'SignupScreen.continueWithGoogle',
+        level: Level.info,
+      );
+    } finally {
+      isLoading.value = false;
+      _isSigningUp = false;
+    }
+  }
+
+  Future<void> _saveUserProfile({required String userId}) async {
+    await supabase.from('user_profiles').upsert({
+      'id': userId,
+      'full_name': nameCtrl.text.trim(),
+      'phone': _formatPhone(phoneCtrl.text.trim()),
+      'role': 'doctor',
+      'preferred_language': 'nepali',
+      'email': emailCtrl.text.trim(),
+      'gender': _mapGender(selectedGender.value),
+      'date_of_birth': selectedDob.value?.toIso8601String(),
+      "province": selectedProvince.value ?? "",
+      "district": selectedDistrict.value ?? "",
+      'municipality': selectedMunicipality.value ?? '',
+      'updated_at': DateTime.now().toIso8601String(),
+    }, onConflict: 'id');
+  }
+
+  Future<void> _saveDoctorProfile({required String userId}) async {
+    final data = <String, dynamic>{
+      'user_id': userId,
+      'specialty': selectedSpecialty.value ?? '',
+      'license_number': licenseCtrl.text.trim(),
+      'qualification': qualificationCtrl.text.trim(),
+      'healthpost_id': selectedHealthpost.value?['id'],
+      'healthpost_name': selectedHealthpost.value?['name'] ?? '',
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+    final expYears = int.tryParse(experienceCtrl.text.trim());
+    if (expYears != null) data['experience_years'] = expYears;
+    await supabase.from('doctors').upsert(data, onConflict: 'user_id');
+  }
+
+  String _authErrorMessage(String message, AppLocalizations l) {
+    if (message.contains('already registered')) return l.emailAlreadyRegistered;
+    if (message.contains('invalid email')) return l.invalidEmail;
+    return l.signUpFailed;
+  }
+
+  @override
+  void onClose() {
+    nameCtrl.dispose();
+    phoneCtrl.dispose();
+    emailCtrl.dispose();
+    passwordCtrl.dispose();
+    confirmPwdCtrl.dispose();
+    licenseCtrl.dispose();
+    qualificationCtrl.dispose();
+    experienceCtrl.dispose();
+    hpSearchCtrl.dispose();
+    super.onClose();
+  }
+}
+
+
+//  SIGNUP SCREEN 
+
+class SignupScreen extends StatefulWidget {
+  const SignupScreen({super.key});
+
+  @override
+  State<SignupScreen> createState() => _SignupScreenState();
+}
+
+class _SignupScreenState extends State<SignupScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  late SignupController _controller;
+
+  final FocusNode _nameFocus = FocusNode();
+  final FocusNode _phoneFocus = FocusNode();
+  final FocusNode _dobFocus = FocusNode();
+  final FocusNode _genderFocus = FocusNode();
+  final FocusNode _provinceFocus = FocusNode();
+  final FocusNode _districtFocus = FocusNode();
+  final FocusNode _municipalityFocus = FocusNode();
+  final FocusNode _licenseFocus = FocusNode();
+  final FocusNode _specialtyFocus = FocusNode();
+  final FocusNode _qualificationFocus = FocusNode();
+  final FocusNode _experienceFocus = FocusNode();
+  final FocusNode _healthpostFocus = FocusNode();
+  final FocusNode _emailFocus = FocusNode();
+  final FocusNode _passwordFocus = FocusNode();
+  final FocusNode _confirmPwdFocus = FocusNode();
 
   @override
   void initState() {
     super.initState();
-    tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
+    _controller = SignupController(_tabController);
   }
 
   @override
   void dispose() {
-    tabController.dispose();
-    emailcontroller.dispose();
-    passwordcontroller.dispose();
-    nameController.dispose();
-    phoneController.dispose();
-    ageController.dispose();
-    confirmPasswordController.dispose();
-    licenseNumberController.dispose();
-    qualificationController.dispose();
-    experienceYearsController.dispose();
-    _hpSearchCtrl.dispose();
+    _tabController.dispose();
+    _controller.onClose();
+    _nameFocus.dispose();
+    _phoneFocus.dispose();
+    _dobFocus.dispose();
+    _genderFocus.dispose();
+    _provinceFocus.dispose();
+    _districtFocus.dispose();
+    _municipalityFocus.dispose();
+    _licenseFocus.dispose();
+    _specialtyFocus.dispose();
+    _qualificationFocus.dispose();
+    _experienceFocus.dispose();
+    _healthpostFocus.dispose();
+    _emailFocus.dispose();
+    _passwordFocus.dispose();
+    _confirmPwdFocus.dispose();
     super.dispose();
+  }
+
+  void _changeTab(int index) {
+    bool isValid = true;
+    if (index == 1 && !_controller.validatePersonalFields(context))
+      isValid = false;
+    if (index == 2 && !_controller.validateDoctorFields(context))
+      isValid = false;
+    if (isValid) _tabController.animateTo(index);
+  }
+
+  Future<void> _selectDate(BuildContext context) async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: now.subtract(const Duration(days: 365 * 30)),
+      firstDate: DateTime(1900),
+      lastDate: now.subtract(
+        const Duration(days: 365 * 18),
+      ), 
+    );
+    if (picked != null) _controller.selectedDob.value = picked;
   }
 
   @override
   Widget build(BuildContext context) {
     final loc = AppLocalizations.of(context)!;
-
-    return Stack(
-      children: [
-        Scaffold(
-          appBar: AppBar(
-            backgroundColor: AppConstants.primaryColor,
-            bottom: TabBar(
-              controller: tabController,
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.white70,
-              indicatorColor: AppConstants.whiteColor,
-              tabs: [
-                Tab(text: loc.personalInfo),
-                Tab(text: loc.doctorInfo),
-                Tab(text: loc.accountInfo),
-              ],
-            ),
-            title: const Row(
-              children: [
-                Image(
-                  image: AssetImage('assets/images/gov_logo.webp'),
-                  width: 40,
-                  height: 40,
-                ),
-                SizedBox(width: 20),
-                Column(
-                  children: [
-                    Text(
-                      AppConstants.nepalSarkar,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    Text(
-                      AppConstants.govtOfNepal,
-                      style: TextStyle(fontSize: 10, color: Colors.white),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            iconTheme: const IconThemeData(color: Colors.white),
-            actions: [
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Obx(() {
-                  final ct = controller.connectionType.value;
-                  if (ct == ConnectivityResult.none)
-                    return ConnectivityIndicator(icon: Icons.signal_wifi_off);
-                  if (ct == ConnectivityResult.wifi)
-                    return ConnectivityIndicator(icon: Icons.wifi);
-                  if (ct == ConnectivityResult.mobile)
-                    return ConnectivityIndicator(
-                      icon: Icons.signal_cellular_4_bar,
-                    );
-                  return const SizedBox.shrink();
-                }),
+    return Obx(
+      () => Stack(
+        children: [
+          Scaffold(
+            appBar: AppBar(
+              backgroundColor: AppConstants.primaryColor,
+              bottom: TabBar(
+                controller: _tabController,
+                labelColor: Colors.white,
+                unselectedLabelColor: Colors.white70,
+                indicatorColor: AppConstants.whiteColor,
+                tabs: const [
+                  Tab(text: 'Personal'),
+                  Tab(text: 'Doctor'),
+                  Tab(text: 'Account'),
+                ],
               ),
-              IconButton(onPressed: () {}, icon: LanguageToggleButton()),
-            ],
-          ),
-          body: TabBarView(
-            controller: tabController,
-            children: [
-              _buildPersonalInfoTab(loc),
-              _buildDoctorInfoTab(loc),
-              _buildAccountInfoTab(loc),
-            ],
-          ),
-        ),
-
-        if (loading)
-          Container(
-            color: Colors.black.withOpacity(0.4),
-            child: const Center(
-              child: Card(
-                child: Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+              title: const Row(
+                children: [
+                  Image(
+                    image: AssetImage('assets/images/gov_logo.webp'),
+                    width: 40,
+                    height: 40,
+                  ),
+                  SizedBox(width: 20),
+                  Column(
                     children: [
-                      CircularProgressIndicator(
-                        color: AppConstants.primaryColor,
-                      ),
-                      SizedBox(height: 16),
                       Text(
-                        'Creating account…',
-                        style: TextStyle(fontWeight: FontWeight.w500),
+                        AppConstants.nepalSarkar,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                      Text(
+                        AppConstants.govtOfNepal,
+                        style: TextStyle(fontSize: 10, color: Colors.white),
                       ),
                     ],
+                  ),
+                ],
+              ),
+              actions: [
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Obx(() {
+                    final ct =
+                        Get.find<ConnectivityController>().connectionType.value;
+                    if (ct == ConnectivityResult.none)
+                      return const ConnectivityIndicator(
+                        icon: Icons.signal_wifi_off,
+                      );
+                    if (ct == ConnectivityResult.wifi)
+                      return const ConnectivityIndicator(icon: Icons.wifi);
+                    if (ct == ConnectivityResult.mobile)
+                      return const ConnectivityIndicator(
+                        icon: Icons.signal_cellular_4_bar,
+                      );
+                    return const SizedBox.shrink();
+                  }),
+                ),
+                IconButton(
+                  onPressed: () {},
+                  icon: const LanguageToggleButton(),
+                ),
+              ],
+            ),
+            body: TabBarView(
+              controller: _tabController,
+              physics: const NeverScrollableScrollPhysics(),
+              children: [
+                _buildPersonalInfoTab(loc),
+                _buildDoctorInfoTab(loc),
+                _buildAccountInfoTab(loc),
+              ],
+            ),
+          ),
+          if (_controller.isLoading.value)
+            Container(
+              color: Colors.black.withOpacity(0.4),
+              child: const Center(
+                child: Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(
+                          color: AppConstants.primaryColor,
+                        ),
+                        SizedBox(height: 16),
+                        Text(
+                          'Creating account…',
+                          style: TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 
-  //  TAB 1 : Personal Info 
   Widget _buildPersonalInfoTab(AppLocalizations loc) {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
@@ -823,24 +618,60 @@ _snackError(l.passwordMismatch);
           _label(loc.name),
           InputField(
             hintText: 'Ram Bahadur',
-            obscureText: false,
-            controller: nameController,
+            controller: _controller.nameCtrl,
+            focusNode: _nameFocus,
+            textInputAction: TextInputAction.next,
+            onEditingComplete: () =>
+                FocusScope.of(context).requestFocus(_phoneFocus),
           ),
           const SizedBox(height: 20),
 
           _label(loc.phone),
           InputField(
             hintText: '98xxxxxxxx',
-            obscureText: false,
-            controller: phoneController,
+            controller: _controller.phoneCtrl,
+            focusNode: _phoneFocus,
+            textInputAction: TextInputAction.next,
+            onEditingComplete: () => _dobFocus.requestFocus(),
           ),
           const SizedBox(height: 20),
 
-          _label(loc.age),
-          InputField(
-            hintText: '35',
-            obscureText: false,
-            controller: ageController,
+          _label('Date of Birth *'),
+          GestureDetector(
+            onTap: () => _selectDate(context),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: AppConstants.primaryColor.withOpacity(0.4),
+                ),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.calendar_today,
+                    size: 20,
+                    color: AppConstants.primaryColor,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _controller.selectedDob.value != null
+                          ? '${_controller.selectedDob.value!.toLocal()}'.split(
+                              ' ',
+                            )[0]
+                          : 'Select birth date',
+                      style: TextStyle(
+                        color: _controller.selectedDob.value != null
+                            ? Colors.black87
+                            : Colors.grey,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
           const SizedBox(height: 20),
 
@@ -848,12 +679,11 @@ _snackError(l.passwordMismatch);
           DropdownInputField(
             hintText: loc.gender,
             items: [loc.male, loc.female, loc.others],
-            onChanged: (value) => setState(() => selectedGender = value),
-            value: selectedGender,
+            onChanged: (v) => _controller.selectedGender.value = v,
+            value: _controller.selectedGender.value,
           ),
           const SizedBox(height: 24),
 
-          //  Address Section 
           _sectionHeader(
             icon: Icons.location_on_outlined,
             title: 'ठेगाना / Address',
@@ -861,74 +691,65 @@ _snackError(l.passwordMismatch);
           ),
           const SizedBox(height: 14),
 
-          // Province
           _label('प्रदेश / Province *'),
           _LocationDropdown(
             hint: 'प्रदेश छान्नुहोस्',
-            value: _selectedProvince,
+            value: _controller.selectedProvince.value,
             items: NepalLocation.provinces,
-            onChanged: (v) => setState(() {
-              _selectedProvince = v;
-              _selectedDistrict = null;
-              _selectedMunicipality = null;
-            }),
+            onChanged: (v) {
+              _controller.selectedProvince.value = v;
+              _controller.selectedDistrict.value = null;
+              _controller.selectedMunicipality.value = null;
+            },
           ),
           const SizedBox(height: 16),
 
-          // District
           _label('जिल्ला / District *'),
           _LocationDropdown(
-            hint: _selectedProvince == null
+            hint: _controller.selectedProvince.value == null
                 ? 'पहिले प्रदेश छान्नुहोस्'
                 : 'जिल्ला छान्नुहोस्',
-            value: _selectedDistrict,
-            items: _selectedProvince != null
-                ? NepalLocation.districtsOf(_selectedProvince!)
+            value: _controller.selectedDistrict.value,
+            items: _controller.selectedProvince.value != null
+                ? NepalLocation.districtsOf(_controller.selectedProvince.value!)
                 : [],
-            enabled: _selectedProvince != null,
-            onChanged: (v) => setState(() {
-              _selectedDistrict = v;
-              _selectedMunicipality = null;
-            }),
+            enabled: _controller.selectedProvince.value != null,
+            onChanged: (v) {
+              _controller.selectedDistrict.value = v;
+              _controller.selectedMunicipality.value = null;
+            },
           ),
           const SizedBox(height: 16),
 
-          // Municipality (optional)
           _label('नगरपालिका / Municipality (वैकल्पिक)'),
           _LocationDropdown(
-            hint: _selectedDistrict == null
+            hint: _controller.selectedDistrict.value == null
                 ? 'पहिले जिल्ला छान्नुहोस्'
                 : 'नगरपालिका छान्नुहोस्',
-            value: _selectedMunicipality,
-            items: _selectedDistrict != null
+            value: _controller.selectedMunicipality.value,
+            items: _controller.selectedDistrict.value != null
                 ? NepalLocation.municipalitiesOf(
-                    _selectedProvince ?? '',
-                    _selectedDistrict!,
+                    _controller.selectedProvince.value ?? '',
+                    _controller.selectedDistrict.value!,
                   )
                 : [],
-            enabled: _selectedDistrict != null,
+            enabled: _controller.selectedDistrict.value != null,
             displayOverride: (v) {
               final t = NepalLocation.typeLabel(v);
               return t.isNotEmpty ? '$v ($t)' : v;
             },
-            onChanged: (v) => setState(() => _selectedMunicipality = v),
+            onChanged: (v) => _controller.selectedMunicipality.value = v,
           ),
-
-          // Selected location summary
-          if (_selectedProvince != null) ...[
+          if (_controller.selectedProvince.value != null) ...[
             const SizedBox(height: 12),
             _LocationSummary(
-              province: _selectedProvince,
-              district: _selectedDistrict,
-              municipality: _selectedMunicipality,
+              province: _controller.selectedProvince.value,
+              district: _controller.selectedDistrict.value,
+              municipality: _controller.selectedMunicipality.value,
             ),
           ],
-
           const SizedBox(height: 28),
-          LoginSignupButton(
-            text: loc.next,
-            onPressed: () => tabController.animateTo(1),
-          ),
+          LoginSignupButton(text: loc.next, onPressed: () => _changeTab(1)),
           const SizedBox(height: 16),
           _loginPromptRow(loc),
           const SizedBox(height: 10),
@@ -940,10 +761,16 @@ _snackError(l.passwordMismatch);
           ),
           const SizedBox(height: 10),
           Center(
-            child: ImageButton(
-              imagePath: 'assets/images/google.png',
-              text: 'Google',
-              onPressed: continueWithGoogle,
+            child: Obx(
+              () => ImageButton(
+                imagePath: 'assets/images/google.png',
+                text: 'Google',
+                  isLoading: _controller.isLoading.value,
+
+                onPressed: _controller.isLoading.value
+                    ? null
+                    : () => _controller.continueWithGoogle(context),
+              ),
             ),
           ),
           const SizedBox(height: 30),
@@ -952,14 +779,12 @@ _snackError(l.passwordMismatch);
     );
   }
 
-  //  TAB 2 : Doctor Info 
   Widget _buildDoctorInfoTab(AppLocalizations loc) {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Section header
           Container(
             padding: const EdgeInsets.all(12),
             margin: const EdgeInsets.only(bottom: 20),
@@ -989,107 +814,121 @@ _snackError(l.passwordMismatch);
               ],
             ),
           ),
-
           _label('NMC License Number *'),
           InputField(
             hintText: 'e.g. 12345-A',
-            obscureText: false,
-            controller: licenseNumberController,
+            controller: _controller.licenseCtrl,
+            focusNode: _licenseFocus,
+            textInputAction: TextInputAction.next,
+            onEditingComplete: () => _specialtyFocus.requestFocus(),
           ),
           const SizedBox(height: 20),
 
           _label('Specialty *'),
           DropdownInputField(
             hintText: 'Select specialty',
-            items: _specialties,
-            onChanged: (value) => setState(() => selectedSpecialty = value),
-            value: selectedSpecialty,
+            items: SignupController.specialties,
+            onChanged: (v) => _controller.selectedSpecialty.value = v,
+            value: _controller.selectedSpecialty.value,
           ),
           const SizedBox(height: 20),
 
           _label('Qualification *'),
           InputField(
             hintText: 'e.g. MBBS, MD',
-            obscureText: false,
-            controller: qualificationController,
+            controller: _controller.qualificationCtrl,
+            focusNode: _qualificationFocus,
+            textInputAction: TextInputAction.next,
+            onEditingComplete: () => _experienceFocus.requestFocus(),
           ),
           const SizedBox(height: 20),
 
           _label('Years of Experience'),
           InputField(
             hintText: 'e.g. 5',
-            obscureText: false,
-            controller: experienceYearsController,
+            controller: _controller.experienceCtrl,
+            focusNode: _experienceFocus,
+            textInputAction: TextInputAction.next,
+            onEditingComplete: () => _healthpostFocus.requestFocus(),
           ),
           const SizedBox(height: 20),
 
           _label('Assigned Healthpost *'),
           const SizedBox(height: 4),
           GestureDetector(
-            onTap: _loadingHealthposts ? null : _openHealthpostPicker,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                color: _selectedHealthpost != null
-                    ? AppConstants.primaryColor.withOpacity(0.05)
-                    : Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: _selectedHealthpost != null
-                      ? AppConstants.primaryColor
-                      : AppConstants.primaryColor.withOpacity(0.4),
-                  width: _selectedHealthpost != null ? 1.5 : 1,
+            onTap: () => _openHealthpostPicker(),
+            child: Obx(
+              () => Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
                 ),
-              ),
-              child: _loadingHealthposts
-                  ? const Center(
-                      child: SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    )
-                  : Row(
-                      children: [
-                        Icon(
-                          _selectedHealthpost != null
-                              ? Icons.local_hospital
-                              : Icons.local_hospital_outlined,
-                          size: 20,
-                          color: _selectedHealthpost != null
-                              ? AppConstants.primaryColor
-                              : Colors.black38,
+                decoration: BoxDecoration(
+                  color: _controller.selectedHealthpost.value != null
+                      ? AppConstants.primaryColor.withOpacity(0.05)
+                      : Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: _controller.selectedHealthpost.value != null
+                        ? AppConstants.primaryColor
+                        : AppConstants.primaryColor.withOpacity(0.4),
+                    width: _controller.selectedHealthpost.value != null
+                        ? 1.5
+                        : 1,
+                  ),
+                ),
+                child: _controller.loadingHealthposts.value
+                    ? const Center(
+                        child: SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            _selectedHealthpost?['name'] ??
-                                'Tap to select healthpost',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: _selectedHealthpost != null
-                                  ? AppConstants.primaryColor
-                                  : Colors.black38,
-                              fontWeight: _selectedHealthpost != null
-                                  ? FontWeight.w600
-                                  : FontWeight.normal,
+                      )
+                    : Row(
+                        children: [
+                          Icon(
+                            _controller.selectedHealthpost.value != null
+                                ? Icons.local_hospital
+                                : Icons.local_hospital_outlined,
+                            size: 20,
+                            color: _controller.selectedHealthpost.value != null
+                                ? AppConstants.primaryColor
+                                : Colors.black38,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              _controller.selectedHealthpost.value?['name'] ??
+                                  'Tap to select healthpost',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color:
+                                    _controller.selectedHealthpost.value != null
+                                    ? AppConstants.primaryColor
+                                    : Colors.black38,
+                                fontWeight:
+                                    _controller.selectedHealthpost.value != null
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                              ),
                             ),
                           ),
-                        ),
-                        Icon(
-                          _selectedHealthpost != null
-                              ? Icons.check_circle_rounded
-                              : Icons.keyboard_arrow_down_rounded,
-                          color: _selectedHealthpost != null
-                              ? AppConstants.primaryColor
-                              : Colors.black38,
-                        ),
-                      ],
-                    ),
+                          Icon(
+                            _controller.selectedHealthpost.value != null
+                                ? Icons.check_circle_rounded
+                                : Icons.keyboard_arrow_down_rounded,
+                            color: _controller.selectedHealthpost.value != null
+                                ? AppConstants.primaryColor
+                                : Colors.black38,
+                          ),
+                        ],
+                      ),
+              ),
             ),
           ),
-          if (_selectedHealthpost != null) ...[
+          if (_controller.selectedHealthpost.value != null) ...[
             const SizedBox(height: 6),
             Row(
               children: [
@@ -1101,8 +940,8 @@ _snackError(l.passwordMismatch);
                 const SizedBox(width: 4),
                 Text(
                   [
-                        _selectedHealthpost!['municipality'],
-                        _selectedHealthpost!['district'],
+                        _controller.selectedHealthpost.value!['municipality'],
+                        _controller.selectedHealthpost.value!['district'],
                       ]
                       .where((e) => e != null && (e as String).isNotEmpty)
                       .join(', '),
@@ -1115,12 +954,11 @@ _snackError(l.passwordMismatch);
             ),
           ],
           const SizedBox(height: 28),
-
           Row(
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () => tabController.animateTo(0),
+                  onPressed: () => _changeTab(0),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppConstants.primaryColor,
                     side: const BorderSide(color: AppConstants.primaryColor),
@@ -1132,13 +970,13 @@ _snackError(l.passwordMismatch);
                   child: const Text('Back'),
                 ),
               ),
-              const SizedBox(width: 12), // add space
-
+              const SizedBox(width: 12),
               Expanded(
                 child: LoginSignupButton(
                   text: loc.next,
                   onPressed: () {
-                    if (_validateDoctorFields()) tabController.animateTo(2);
+                    if (_controller.validateDoctorFields(context))
+                      _changeTab(2);
                   },
                 ),
               ),
@@ -1149,7 +987,6 @@ _snackError(l.passwordMismatch);
     );
   }
 
-  //  TAB 3 : Account Info 
   Widget _buildAccountInfoTab(AppLocalizations loc) {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
@@ -1159,24 +996,28 @@ _snackError(l.passwordMismatch);
           _label(loc.email),
           InputField(
             hintText: 'doctor@gmail.com',
-            obscureText: false,
-            controller: emailcontroller,
+            controller: _controller.emailCtrl,
+            focusNode: _emailFocus,
+            textInputAction: TextInputAction.next,
+            onEditingComplete: () => _passwordFocus.requestFocus(),
           ),
           const SizedBox(height: 20),
 
           _label(loc.password),
-          InputField(
+          PasswordField(
+            controller: _controller.passwordCtrl,
             hintText: '••••••••',
-            obscureText: true,
-            controller: passwordcontroller,
+            focusNode: _passwordFocus,
+            onSubmitted: () => _confirmPwdFocus.requestFocus(),
           ),
           const SizedBox(height: 20),
 
           _label(loc.confirmpassword),
-          InputField(
+          PasswordField(
+            controller: _controller.confirmPwdCtrl,
             hintText: '••••••••',
-            obscureText: true,
-            controller: confirmPasswordController,
+            focusNode: _confirmPwdFocus,
+            onSubmitted: () => _controller.signUp(context),
           ),
           const SizedBox(height: 28),
 
@@ -1184,7 +1025,7 @@ _snackError(l.passwordMismatch);
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () => tabController.animateTo(1),
+                  onPressed: () => _changeTab(1),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppConstants.primaryColor,
                     side: const BorderSide(color: AppConstants.primaryColor),
@@ -1198,7 +1039,10 @@ _snackError(l.passwordMismatch);
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: LoginSignupButton(text: loc.signup, onPressed: signUp),
+                child: LoginSignupButton(
+                  text: loc.signup,
+                  onPressed: () => _controller.signUp(context),
+                ),
               ),
             ],
           ),
@@ -1208,7 +1052,280 @@ _snackError(l.passwordMismatch);
     );
   }
 
-  //  Shared UI helpers 
+  Future<void> _openHealthpostPicker() async {
+    await _controller.fetchHealthposts();
+    if (!mounted) return;
+    _controller.hpSearchCtrl.clear();
+    _controller.filterHealthposts('');
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModal) {
+          void filterAndUpdate(String q) {
+            final lower = q.toLowerCase().trim();
+            final filtered = lower.isEmpty
+                ? List<Map<String, dynamic>>.from(_controller.allHealthposts)
+                : _controller.allHealthposts.where((h) {
+                    final name = (h['name'] as String? ?? '').toLowerCase();
+                    final dist = (h['district'] as String? ?? '').toLowerCase();
+                    final muni = (h['municipality'] as String? ?? '')
+                        .toLowerCase();
+                    return name.contains(lower) ||
+                        dist.contains(lower) ||
+                        muni.contains(lower);
+                  }).toList();
+            setModal(() => _controller.filteredHealthposts.value = filtered);
+          }
+
+          return DraggableScrollableSheet(
+            initialChildSize: 0.75,
+            maxChildSize: 0.95,
+            minChildSize: 0.5,
+            expand: false,
+            builder: (_, scrollCtrl) => Column(
+              children: [
+                Container(
+                  margin: const EdgeInsets.symmetric(vertical: 10),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.local_hospital,
+                        color: AppConstants.primaryColor,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        AppLocalizations.of(context)!.selectHealthpost,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: AppConstants.primaryColor,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (_controller.healthpostError.value != null)
+                        TextButton.icon(
+                          onPressed: () async {
+                            setModal(
+                              () => _controller.loadingHealthposts.value = true,
+                            );
+                            await _controller.fetchHealthposts(
+                              forceRefresh: true,
+                            );
+                            setModal(() {});
+                          },
+                          icon: const Icon(Icons.refresh, size: 16),
+                          label: Text(AppLocalizations.of(context)!.retry),
+                        ),
+                      if (_controller.healthpostError.value == null &&
+                          !_controller.loadingHealthposts.value)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppConstants.primaryColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '${_controller.filteredHealthposts.length} ${AppLocalizations.of(context)!.found}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppConstants.primaryColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: TextField(
+                    controller: _controller.hpSearchCtrl,
+                    autofocus:
+                        _controller.allHealthposts.isNotEmpty &&
+                        _controller.healthpostError.value == null,
+                    enabled:
+                        !_controller.loadingHealthposts.value &&
+                        _controller.healthpostError.value == null,
+                    decoration: InputDecoration(
+                      hintText: AppLocalizations.of(context)!.searchHealthpost,
+                      prefixIcon: const Icon(Icons.search, size: 20),
+                      suffixIcon: ValueListenableBuilder(
+                        valueListenable: _controller.hpSearchCtrl,
+                        builder: (_, v, __) => v.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 18),
+                                onPressed: () {
+                                  _controller.hpSearchCtrl.clear();
+                                  filterAndUpdate('');
+                                },
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(
+                          color: AppConstants.primaryColor,
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
+                    onChanged: filterAndUpdate,
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: Obx(() {
+                    if (_controller.loadingHealthposts.value) {
+                      return Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const CircularProgressIndicator(),
+                            const SizedBox(height: 12),
+                            Text(
+                              AppLocalizations.of(context)!.loadingHealthposts,
+                              style: const TextStyle(color: Colors.black54),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+                    if (_controller.healthpostError.value != null) {
+                      return Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.cloud_off,
+                              size: 48,
+                              color: Colors.grey.shade400,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              _controller.healthpostError.value!,
+                              style: TextStyle(color: Colors.grey.shade600),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+                    if (_controller.filteredHealthposts.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.search_off,
+                              size: 48,
+                              color: Colors.grey.shade400,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              AppLocalizations.of(context)!.noHealthpostsFound,
+                              style: TextStyle(color: Colors.grey.shade500),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+                    return ListView.separated(
+                      controller: scrollCtrl,
+                      itemCount: _controller.filteredHealthposts.length,
+                      separatorBuilder: (_, __) =>
+                          const Divider(height: 1, indent: 60),
+                      itemBuilder: (_, i) {
+                        final hp = _controller.filteredHealthposts[i];
+                        final isSelected =
+                            _controller.selectedHealthpost.value?['id'] ==
+                            hp['id'];
+                        final sub = [hp['municipality'], hp['district']]
+                            .where((e) => e != null && (e as String).isNotEmpty)
+                            .join(', ');
+                        return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 4,
+                          ),
+                          leading: CircleAvatar(
+                            backgroundColor: isSelected
+                                ? AppConstants.primaryColor
+                                : AppConstants.primaryColor.withOpacity(0.08),
+                            child: Icon(
+                              Icons.local_hospital_outlined,
+                              size: 18,
+                              color: isSelected
+                                  ? Colors.white
+                                  : AppConstants.primaryColor,
+                            ),
+                          ),
+                          title: Text(
+                            hp['name'] ?? '',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: isSelected
+                                  ? AppConstants.primaryColor
+                                  : Colors.black87,
+                            ),
+                          ),
+                          subtitle: sub.isNotEmpty
+                              ? Text(sub, style: const TextStyle(fontSize: 12))
+                              : null,
+                          trailing: isSelected
+                              ? Icon(
+                                  Icons.check_circle_rounded,
+                                  color: AppConstants.primaryColor,
+                                )
+                              : Icon(
+                                  Icons.chevron_right,
+                                  color: Colors.grey.shade400,
+                                  size: 20,
+                                ),
+                          onTap: () {
+                            _controller.selectedHealthpost.value = hp;
+                            Navigator.pop(ctx);
+                          },
+                        );
+                      },
+                    );
+                  }),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _label(String text) => Padding(
     padding: const EdgeInsets.only(bottom: 6),
     child: Text(
@@ -1267,7 +1384,7 @@ _snackError(l.passwordMismatch);
         style: const TextStyle(fontSize: 14, color: Colors.black54),
       ),
       TextButton(
-        onPressed: () => Get.offAll(LoginScreen()),
+        onPressed: () => Get.offAll(() => LoginScreen()),
         child: Text(
           loc.login,
           style: const TextStyle(
@@ -1281,6 +1398,9 @@ _snackError(l.passwordMismatch);
   );
 }
 
+
+//  Helper widgets
+
 class _LocationDropdown extends StatelessWidget {
   final String hint;
   final String? value;
@@ -1288,7 +1408,6 @@ class _LocationDropdown extends StatelessWidget {
   final bool enabled;
   final ValueChanged<String?> onChanged;
   final String Function(String)? displayOverride;
-
   const _LocationDropdown({
     required this.hint,
     required this.value,
@@ -1360,7 +1479,6 @@ class _LocationDropdown extends StatelessWidget {
 
 class _LocationSummary extends StatelessWidget {
   final String? province, district, municipality;
-
   const _LocationSummary({
     required this.province,
     required this.district,
@@ -1400,6 +1518,53 @@ class _LocationSummary extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// Password field with visibility toggle
+class PasswordField extends StatefulWidget {
+  final TextEditingController controller;
+  final String hintText;
+  final FocusNode? focusNode;
+  final VoidCallback? onSubmitted;
+  const PasswordField({
+    required this.controller,
+    required this.hintText,
+    this.focusNode,
+    this.onSubmitted,
+  });
+
+  @override
+  State<PasswordField> createState() => _PasswordFieldState();
+}
+
+class _PasswordFieldState extends State<PasswordField> {
+  bool _obscure = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: widget.controller,
+      focusNode: widget.focusNode,
+      obscureText: _obscure,
+      textInputAction: TextInputAction.next,
+      onEditingComplete: widget.onSubmitted,
+      decoration: InputDecoration(
+        hintText: widget.hintText,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(
+            color: AppConstants.primaryColor,
+            width: 1.5,
+          ),
+        ),
+        suffixIcon: IconButton(
+          icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
+          onPressed: () => setState(() => _obscure = !_obscure),
+        ),
       ),
     );
   }

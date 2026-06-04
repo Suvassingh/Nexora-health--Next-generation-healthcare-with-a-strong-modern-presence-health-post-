@@ -1,25 +1,26 @@
-
-
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:get/get.dart';
-import 'package:healthpost_app/call_screen.dart';
-import 'package:healthpost_app/chat_screen.dart';
+ import 'package:healthpost_app/chat_screen.dart';
 import 'package:healthpost_app/l10n/app_localizations.dart';
+import 'package:healthpost_app/livekit_screen.dart';
 import 'package:healthpost_app/models/notification_model.dart';
 import 'package:healthpost_app/notification_screen.dart';
 import 'package:healthpost_app/providers/appointment_provider.dart';
 import 'package:healthpost_app/providers/notification_provider.dart';
+import 'package:healthpost_app/services/encryption_service.dart';
 import 'package:healthpost_app/services/notification_service.dart';
+import 'package:healthpost_app/services/user_key_service.dart';
 import 'package:healthpost_app/widgets/appointment/appointment_card.dart';
 import 'package:healthpost_app/widgets/appointment/bottomsheet.dart';
 import 'package:healthpost_app/app_constants.dart';
 import 'package:healthpost_app/models/doctor_appointment.dart';
 import 'package:healthpost_app/services/api_service.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class DoctorAppointmentsScreen extends ConsumerStatefulWidget {
   const DoctorAppointmentsScreen({super.key});
@@ -39,12 +40,11 @@ class _DoctorAppointmentsScreenState
   @override
   void initState() {
     super.initState();
+    _initUserKeys();
     _tabCtrl = TabController(length: 5, vsync: this);
-    // Wire realtime in-app notifications
-    _notifSub = NotificationService.instance.inAppStream.listen((n) {
+     _notifSub = NotificationService.instance.inAppStream.listen((n) {
       ref.read(notificationProvider.notifier).addNew(n);
-      // Also refresh appointments if it's a patient booking
-      if (n.type == 'new_appointment') {
+       if (n.type == 'new_appointment') {
         ref.read(appointmentsProvider.notifier).refresh();
       }
     });
@@ -52,17 +52,22 @@ class _DoctorAppointmentsScreenState
 
   @override
   void dispose() {
-        _notifSub?.cancel();
+    _notifSub?.cancel();
     _tabCtrl.dispose();
     super.dispose();
   }
-
+  Future<void> _initUserKeys() async {
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    if (currentUserId != null) {
+      await UserKeyService.ensureUserKeyPair(currentUserId);
+    }
+  }
   Future<void> _updateStatus(
-      String apptId,
-      Future<void> Function(String) apiCall, {
-        String? snackMsg,
-      }) async {
-          final l = AppLocalizations.of(context)!; // cache before await
+    String apptId,
+    Future<void> Function(String) apiCall, {
+    String? snackMsg,
+  }) async {
+    final l = AppLocalizations.of(context)!;  
 
     setState(() => _processing = true);
     try {
@@ -71,7 +76,7 @@ class _DoctorAppointmentsScreenState
           .updateStatus(apptId, apiCall);
       Get.snackbar(
         l.updated,
-      snackMsg ?? l.statusUpdated,
+        snackMsg ?? l.statusUpdated,
         backgroundColor: const Color(0xFFEAF7EF),
         colorText: const Color(0xFF1A7A4A),
         borderRadius: 12,
@@ -79,7 +84,9 @@ class _DoctorAppointmentsScreenState
         duration: const Duration(seconds: 3),
       );
     } catch (e) {
-     Get.snackbar(l.error, '${l.couldNotUpdate}: $e',
+      Get.snackbar(
+        l.error,
+        '${l.couldNotUpdate}: $e',
         backgroundColor: const Color(0xFFFEF2F2),
         colorText: const Color(0xFFEF4444),
         borderRadius: 12,
@@ -101,7 +108,7 @@ class _DoctorAppointmentsScreenState
       await _updateStatus(
         a.id,
         ApiService.confirmAppointment,
-       snackMsg: AppLocalizations.of(
+        snackMsg: AppLocalizations.of(
           context,
         )!.appointmentConfirmedFor(a.patientName),
       );
@@ -110,7 +117,7 @@ class _DoctorAppointmentsScreenState
 
   Future<void> _declineAppt(DAppt a) async {
     final ok = await _confirmDialog(
-     title: AppLocalizations.of(context)!.declineAppointmentQ,
+      title: AppLocalizations.of(context)!.declineAppointmentQ,
       body:
           '${a.patientName}  •  ${a.dateTimeLabel}\n${AppLocalizations.of(context)!.declineWarning}',
       confirmLabel: AppLocalizations.of(context)!.decline,
@@ -120,7 +127,7 @@ class _DoctorAppointmentsScreenState
       await _updateStatus(
         a.id,
         ApiService.cancelAppointment,
-snackMsg: AppLocalizations.of(context)!.appointmentDeclined,
+        snackMsg: AppLocalizations.of(context)!.appointmentDeclined,
       );
     }
   }
@@ -136,14 +143,44 @@ snackMsg: AppLocalizations.of(context)!.appointmentDeclined,
       await _updateStatus(
         a.id,
         ApiService.completeAppointment,
-snackMsg: AppLocalizations.of(context)!.consultationMarkedComplete,
+        snackMsg: AppLocalizations.of(context)!.consultationMarkedComplete,
       );
     }
   }
+Future<void> _autoCompletePastAppointments(List<DAppt> confirmedAppts) async {
+    final today = DateTime.now();
+    final todayStart = DateTime(today.year, today.month, today.day);
+    // An appointment day has passed if its scheduled date is before today's start.
+    final pastConfirmed = confirmedAppts
+        .where(
+          (a) =>
+              a.status == 'confirmed' &&
+              DateTime(
+                a.scheduledAt.year,
+                a.scheduledAt.month,
+                a.scheduledAt.day,
+              ).isBefore(todayStart),
+        )
+        .toList();
 
+    if (pastConfirmed.isEmpty) return;
+
+    for (final appt in pastConfirmed) {
+      try {
+        await ApiService.completeAppointment(appt.id);
+        debugPrint(' Auto‑completed appointment ${appt.id} (day passed)');
+      } catch (e) {
+        debugPrint(' Auto‑complete failed for ${appt.id}: $e');
+      }
+    }
+
+    if (mounted) {
+      ref.read(appointmentsProvider.notifier).refresh();
+    }
+  }
   Future<void> _noShowAppt(DAppt a) async {
     final ok = await _confirmDialog(
-   title: AppLocalizations.of(context)!.markAsNoShow,
+      title: AppLocalizations.of(context)!.markAsNoShow,
       body: AppLocalizations.of(context)!.patientDidNotJoin(a.patientName),
       confirmLabel: AppLocalizations.of(context)!.noShow,
       confirmColor: Colors.brown.shade600,
@@ -152,7 +189,7 @@ snackMsg: AppLocalizations.of(context)!.consultationMarkedComplete,
       await _updateStatus(
         a.id,
         ApiService.noShowAppointment,
-snackMsg: AppLocalizations.of(context)!.markedAsNoShow,
+        snackMsg: AppLocalizations.of(context)!.markedAsNoShow,
       );
     }
   }
@@ -162,46 +199,41 @@ snackMsg: AppLocalizations.of(context)!.markedAsNoShow,
     required String body,
     required String confirmLabel,
     required Color confirmColor,
-  }) =>
-      showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text(
-            title,
-            style:
-            const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          content: Text(
-            body,
-            style: const TextStyle(fontSize: 13, color: Colors.black54),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child:
-              Text(
+  }) => showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Text(
+        title,
+        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+      ),
+      content: Text(
+        body,
+        style: const TextStyle(fontSize: 13, color: Colors.black54),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: Text(
             AppLocalizations.of(context)!.cancel,
             style: const TextStyle(color: Colors.grey),
           ),
-
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: confirmColor,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-              child: Text(confirmLabel),
-            ),
-          ],
         ),
-      );
+        ElevatedButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: confirmColor,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+          child: Text(confirmLabel),
+        ),
+      ],
+    ),
+  );
 
   void _showDetail(DAppt a) => showModalBottomSheet(
     context: context,
@@ -211,66 +243,197 @@ snackMsg: AppLocalizations.of(context)!.markedAsNoShow,
       appt: a,
       onConfirm: a.isPending
           ? () {
-        Navigator.pop(context);
-        _confirmAppt(a);
-      }
+              Navigator.pop(context);
+              _confirmAppt(a);
+            }
           : null,
       onDecline: a.isPending
           ? () {
-        Navigator.pop(context);
-        _declineAppt(a);
-      }
+              Navigator.pop(context);
+              _declineAppt(a);
+            }
           : null,
       onComplete: a.isConfirmed
           ? () {
-        Navigator.pop(context);
-        _completeAppt(a);
-      }
+              Navigator.pop(context);
+              _completeAppt(a);
+            }
           : null,
       onNoShow: a.isConfirmed
           ? () {
-        Navigator.pop(context);
-        _noShowAppt(a);
-      }
+              Navigator.pop(context);
+              _noShowAppt(a);
+            }
           : null,
     ),
   );
+  Future<String> _ensureConversationExists(String patientId, String doctorId) async {
+    final supabase = Supabase.instance.client;
+
+    final existing = await supabase
+        .from('conversations')
+        .select('id')
+        .eq('patient_id', patientId)
+        .eq('doctor_id', doctorId)
+        .maybeSingle();
+
+    if (existing != null) return existing['id'] as String;
+
+    final rows = await supabase
+        .from('user_profiles')
+        .select('id, public_key')
+        .inFilter('id', [patientId, doctorId]);
+
+    final Map<String, String?> rawKeys = {
+      for (final r in rows) r['id'] as String : r['public_key'] as String?,
+    };
+
+    final patientKey = rawKeys[patientId];
+    final doctorKey = rawKeys[doctorId];
+
+    if (patientKey == null) {
+      throw Exception(
+        'Patient has not set up encryption yet. '
+            'Please ask them to open the app once.',
+      );
+    }
+    if (doctorKey == null) {
+      throw Exception(
+        'Doctor has not set up encryption yet. '
+            'Please restart the app.',
+      );
+    }
+
+    final aesKey = EncryptionService.generateAESKey();
+    final aesB64 = aesKey.base64;
+
+    final encForPatient = EncryptionService.encryptWithRSA(
+      aesB64,
+      EncryptionService.parsePublicKeyFromPem(patientKey),
+    );
+    final encForDoctor = EncryptionService.encryptWithRSA(
+      aesB64,
+      EncryptionService.parsePublicKeyFromPem(doctorKey),
+    );
+
+    final response = await supabase
+        .from('conversations')
+        .insert({
+      'patient_id': patientId,
+      'doctor_id': doctorId,
+      'aes_key_encrypted_for_patient': encForPatient,
+      'aes_key_encrypted_for_doctor': encForDoctor,
+    })
+        .select('id')
+        .single();
+
+    return response['id'] as String;
+  }
 
   Future<void> _startConsultation(DAppt appt) async {
-      final l = AppLocalizations.of(context)!; 
-
+    final l = AppLocalizations.of(context)!;
     final type = appt.consultType.toLowerCase();
+
     if (type == 'video' || type == 'audio') {
       final isVideo = type == 'video';
+
       await [Permission.microphone, if (isVideo) Permission.camera].request();
+
       try {
-        final result = await ApiService.initiateCall(
-          calleeId: appt.patientId,
+        final currentUserId = Supabase.instance.client.auth.currentUser!.id;
+
+        //  Get doctor name 
+        final doctorProfile = await Supabase.instance.client
+            .from('user_profiles')
+            .select('full_name')
+            .eq('id', currentUserId)
+            .maybeSingle();
+        final doctorName = doctorProfile?['full_name'] as String? ?? 'Doctor';
+
+        // appt.patientId is already the user UUID — use directly
+        final patientUserId = appt.patientId;
+
+        if (patientUserId.isEmpty) {
+          Get.snackbar(
+            l.error,
+            'Patient ID not found.',
+            backgroundColor: const Color(0xFFFEF2F2),
+            colorText: const Color(0xFFEF4444),
+          );
+          return;
+        }
+
+        //  Initiate LiveKit call 
+        final result = await ApiService.initiateLiveKitCall(
+          callerId: currentUserId,
+          calleeId: patientUserId,
           appointmentId: appt.id,
           callType: isVideo ? 'video' : 'audio',
+          callerName: 'Dr. $doctorName',
         );
-        final callId = result['call_id'] as String;
+
         Get.to(
-              () => CallScreen(
-            callId: callId,
-            remoteUserId: appt.patientId,
+          () => LiveKitCallScreen(
+            livekitUrl: 'ws://45.115.217.244:7880',
+            token: result['callerToken']!,
+            roomName: result['roomName']!,
             remoteUserName: appt.patientName,
             isVideo: isVideo,
             isCaller: true,
           ),
         );
       } catch (e) {
-        Get.snackbar(l.error, '${l.callFailed}: $e');
+        Get.snackbar(
+          l.error,
+          '${l.callFailed}: $e',
+          backgroundColor: const Color(0xFFFEF2F2),
+          colorText: const Color(0xFFEF4444),
+        );
       }
-    } else {
-      Get.to(() => ChatScreen(appt: appt));
+    } else if (type == 'chat' || type == 'message') {
+      final currentUserId = Supabase.instance.client.auth.currentUser!.id;
+      final patientId = appt.patientId;
+
+      try {
+        final String conversationId = await _ensureConversationExists(
+          patientId,
+          currentUserId,
+        );
+final now = DateTime.now();
+        final appointmentDate = DateTime(
+          appt.scheduledAt.year,
+          appt.scheduledAt.month,
+          appt.scheduledAt.day,
+        );
+        final todayDate = DateTime(now.year, now.month, now.day);
+        final canMessageToday = appointmentDate == todayDate;
+        Get.to(
+          () => ChatScreen(
+            conversationId: conversationId,
+            partnerId: patientId,
+            partnerName: appt.patientName,
+            partnerAvatarUrl: appt.patientAvatarUrl,
+            canSendMessages: canMessageToday,
+          ),
+        );
+      } catch (e) {
+        Get.snackbar('Error', e.toString());
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final apptAsync = ref.watch(appointmentsProvider);
-
+    apptAsync.whenData((data) {
+      final allConfirmed = [
+        ...data.today.where((a) => a.status == 'confirmed'),
+        ...data.upcoming.where((a) => a.status == 'confirmed'),
+      ];
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _autoCompletePastAppointments(allConfirmed);
+      });
+    });
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
       appBar: apptAsync.when(
@@ -302,9 +465,9 @@ snackMsg: AppLocalizations.of(context)!.markedAsNoShow,
     systemOverlayStyle: SystemUiOverlayStyle.light,
     leading: Navigator.canPop(context)
         ? IconButton(
-      icon: const Icon(Icons.arrow_back, color: Colors.white),
-      onPressed: () => Get.back(),
-    )
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () => Get.back(),
+          )
         : null,
     title: Text(
       AppLocalizations.of(context)!.appointments,
@@ -315,11 +478,6 @@ snackMsg: AppLocalizations.of(context)!.markedAsNoShow,
       ),
     ),
     actions: [
-      IconButton(
-        icon: const Icon(Icons.refresh_rounded, color: Colors.white),
-        onPressed: () =>
-            ref.read(appointmentsProvider.notifier).refresh(),
-      ),
       Consumer(
         builder: (context, ref, _) {
           final unread = ref.watch(notificationProvider).unreadCount;
@@ -364,7 +522,6 @@ snackMsg: AppLocalizations.of(context)!.markedAsNoShow,
           );
         },
       ),
-      //  Original refresh button 
       IconButton(
         icon: const Icon(Icons.refresh_rounded, color: Colors.white),
         onPressed: () => ref.read(appointmentsProvider.notifier).refresh(),
@@ -378,8 +535,7 @@ snackMsg: AppLocalizations.of(context)!.markedAsNoShow,
       indicatorWeight: 3,
       isScrollable: true,
       tabAlignment: TabAlignment.start,
-      labelStyle:
-      const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+      labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
       unselectedLabelStyle: const TextStyle(fontSize: 12),
       tabs: [
         Tab(
@@ -417,8 +573,7 @@ snackMsg: AppLocalizations.of(context)!.markedAsNoShow,
             appt: a,
             processing: _processing,
             onTap: () => _showDetail(a),
-            onConsultTap:
-            type == 'today' ? () => _startConsultation(a) : null,
+            onConsultTap: type == 'today' ? () => _startConsultation(a) : null,
             onConfirm: type == 'pending' ? () => _confirmAppt(a) : null,
             onDecline: type == 'pending' ? () => _declineAppt(a) : null,
             onComplete: (type == 'today' || type == 'upcoming')
@@ -434,7 +589,7 @@ snackMsg: AppLocalizations.of(context)!.markedAsNoShow,
   }
 
   Widget _buildEmpty(String type) {
-      final l = AppLocalizations.of(context)!;
+    final l = AppLocalizations.of(context)!;
 
     final map = {
       'pending': [
@@ -502,8 +657,11 @@ snackMsg: AppLocalizations.of(context)!.markedAsNoShow,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.error_outline_rounded,
-              size: 48, color: Colors.grey.shade300),
+          Icon(
+            Icons.error_outline_rounded,
+            size: 48,
+            color: Colors.grey.shade300,
+          ),
           const SizedBox(height: 12),
           Text(
             AppLocalizations.of(context)!.couldNotLoadAppointments,
@@ -516,16 +674,14 @@ snackMsg: AppLocalizations.of(context)!.markedAsNoShow,
           const SizedBox(height: 6),
           Text(
             error,
-            style:
-            TextStyle(fontSize: 11, color: Colors.grey.shade400),
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 20),
           ElevatedButton.icon(
-            onPressed: () =>
-                ref.read(appointmentsProvider.notifier).refresh(),
+            onPressed: () => ref.read(appointmentsProvider.notifier).refresh(),
             icon: const Icon(Icons.refresh_rounded),
-label: Text(AppLocalizations.of(context)!.retry),
+            label: Text(AppLocalizations.of(context)!.retry),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppConstants.primaryColor,
               foregroundColor: Colors.white,
