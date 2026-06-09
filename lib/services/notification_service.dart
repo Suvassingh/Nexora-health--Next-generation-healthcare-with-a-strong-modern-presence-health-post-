@@ -212,7 +212,34 @@ class NotificationService {
       _realtimeChannel = null;
     }
   }
-
+// Inside NotificationService class
+  Future<void> showLocalNotification({
+    required int id,
+    required String title,
+    required String body,
+    Map<String, dynamic>? payload,
+  }) async {
+    await _localNotifications.show(
+      id,
+      title,
+      body,
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          'healthpost_channel',
+          'HealthPost Notifications',
+          importance: Importance.high,
+          priority: Priority.high,
+          icon: '@mipmap/ic_launcher',
+        ),
+        iOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      ),
+      payload: payload != null ? jsonEncode(payload) : null,
+    );
+  }
   //  MESSAGE HANDLING 
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
     await _showLocalNotification(message);

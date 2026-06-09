@@ -10,6 +10,8 @@ import 'package:healthpost_app/app_constants.dart';
 import 'package:healthpost_app/controller/internet_status_controller.dart';
 import 'package:healthpost_app/home_screen.dart';
 import 'package:healthpost_app/l10n/app_localizations.dart';
+import 'package:healthpost_app/services/appointment_reminder_seervice.dart';
+import 'package:healthpost_app/services/key_manager_service.dart';
 import 'package:healthpost_app/signup_screen.dart';
 import 'package:healthpost_app/widgets/connectivity_icon.dart';
 import 'package:healthpost_app/widgets/image_button.dart';
@@ -80,6 +82,9 @@ class LoginController extends GetxController {
       }
       // Move FCM after verification
       await FcmService.onUserLogin();
+      await AppointmentReminderService.rescheduleAllReminders();
+      await KeyManagerService.ensureKeyPair();
+
       Get.offAll(() => HomeScreen());
     } on AuthException catch (e) {
       Get.snackbar(l.error, _mapAuthError(e.message, l));
@@ -287,9 +292,14 @@ class _LoginScreenState extends State<LoginScreen> {
           IconButton(onPressed: () {}, icon: const LanguageToggleButton()),
         ],
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+        body: SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: MediaQuery.of(context).size.height,
+              ),
+              child: IntrinsicHeight(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Lottie.asset('assets/images/login.json', width: 200, height: 200),
             const SizedBox(height: 20),
@@ -330,18 +340,18 @@ class _LoginScreenState extends State<LoginScreen> {
                     onSubmitted: () => _controller.login(context),
                   ),
                   const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: () => _controller.resetPassword(context),
-                      child: Text(
-                        AppLocalizations.of(context)!.forgotPassword,
-                        style: const TextStyle(
-                          color: AppConstants.secondaryColor,
-                        ),
-                      ),
-                    ),
-                  ),
+                  // Align(
+                  //   alignment: Alignment.centerRight,
+                  //   child: TextButton(
+                  //     onPressed: () => _controller.resetPassword(context),
+                  //     child: Text(
+                  //       AppLocalizations.of(context)!.forgotPassword,
+                  //       style: const TextStyle(
+                  //         color: AppConstants.secondaryColor,
+                  //       ),
+                  //     ),
+                  //   ),
+                  // ),
                 ],
               ),
             ),
@@ -403,6 +413,8 @@ class _LoginScreenState extends State<LoginScreen> {
           ],
         ),
       ),
+            )
+    )
     );
   }
 }

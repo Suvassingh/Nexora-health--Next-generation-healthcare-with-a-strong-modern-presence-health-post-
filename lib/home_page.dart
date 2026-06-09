@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:healthpost_app/appointment_screen.dart';
 import 'package:healthpost_app/l10n/app_localizations.dart';
+import 'package:healthpost_app/services/appointment_reminder_seervice.dart';
 import 'package:healthpost_app/widgets/home_appointment.dart';
 import 'package:healthpost_app/widgets/home_hero_header.dart';
 import 'package:healthpost_app/widgets/home_simmer.dart';
@@ -96,6 +97,8 @@ class _DoctorHomeScreenState extends ConsumerState<DoctorHomeScreen>
     ConnectivityController(),
   );
 
+  bool _remindersScheduled = false; 
+
 
   late AnimationController _animController;
   late Animation<double> _fadeAnim;
@@ -170,30 +173,36 @@ class _DoctorHomeScreenState extends ConsumerState<DoctorHomeScreen>
       backgroundColor: const Color(0xFFF0F4F8),
       appBar: _buildAppBar(),
 
-      body: homeAsync.when(
-        loading: () => const HomeShimmer(),
+ body: homeAsync.when(
+  data: (data) {
+    // 1️⃣ Schedule reminders only once (moved from the first data block)
+    if (!_remindersScheduled) {
+      _remindersScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        AppointmentReminderService.rescheduleAllReminders();
+      });
+    }
 
-        error: (e, _) => _buildErrorState(e.toString()),
+    // 2️⃣ Start the animation if not already started (moved from the second data block)
+    if (!_animController.isCompleted) {
+      _animController.forward();
+    }
 
-        data: (data) {
-          if (!_animController.isCompleted) {
-            _animController.forward();
-          }
-
-          return FadeTransition(
-            opacity: _fadeAnim,
-            child: RefreshIndicator(
-              color: AppConstants.primaryColor,
-
-              onRefresh: () async {
-                ref.invalidate(homeDataProvider);
-              },
-
-              child: _buildBody(data),
-            ),
-          );
+    // 3️⃣ Return the animated content wrapped with RefreshIndicator
+    return FadeTransition(
+      opacity: _fadeAnim,
+      child: RefreshIndicator(
+        color: AppConstants.primaryColor,
+        onRefresh: () async {
+          ref.invalidate(homeDataProvider);
         },
+        child: _buildBody(data),
       ),
+    );
+  },
+  loading: () => const HomeShimmer(),
+  error: (e, _) => _buildErrorState(e.toString()),
+)
     );
   }
 

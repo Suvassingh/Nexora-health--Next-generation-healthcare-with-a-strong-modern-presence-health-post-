@@ -115,7 +115,7 @@ class DAppt {
       patientId: json['patient_id']?.toString() ?? '',
       patientName: profile['full_name']?.toString() ?? 'Patient',
       patientAvatarUrl: profile['avatar_url']?.toString(),
-      scheduledAt: DateTime.parse(json['scheduled_at']).toLocal(),
+      scheduledAt: DateTime.parse(json['scheduled_at']).toUtc(),
       status: json['status']?.toString() ?? 'pending',
       consultType: json['consultation_type']?.toString() ?? 'audio',
       patientNotes: json['patient_notes']?.toString(),

@@ -1,6 +1,10 @@
+import 'dart:convert';
 import 'dart:io' show Platform;
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:healthpost_app/services/notification_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class FcmService {
@@ -15,8 +19,34 @@ class FcmService {
     FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
       _sendCurrentToken(token: newToken);
     });
-  }
+        FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
+  }
+@pragma('vm:entry-point')
+  static Future<void> _firebaseMessagingBackgroundHandler(
+    RemoteMessage message,
+  ) async {
+    await Firebase.initializeApp();
+    final data = message.data;
+    if (data['type'] == 'missed_call') {
+      // Show local notification even when app is terminated
+      await _showMissedCallNotification(data);
+    }
+  }
+static Future<void> _showMissedCallNotification(
+    Map<String, dynamic> data,
+  ) async {
+    final callerName = data['callerName'] ?? 'Unknown';
+    final callId =
+        data['callId'] ?? DateTime.now().millisecondsSinceEpoch.toString();
+
+    await NotificationService.instance.showLocalNotification(
+      id: callId.hashCode,
+      title: 'Missed Call',
+      body: 'Missed call from $callerName',
+      payload: {'type': 'missed_call', 'callId': callId},
+    );
+  }
   /// Call after EVERY successful login (email/password, Google, etc.)
   static Future<void> onUserLogin() async {
     await _sendCurrentToken();

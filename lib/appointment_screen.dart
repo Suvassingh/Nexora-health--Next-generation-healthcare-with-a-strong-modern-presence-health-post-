@@ -11,6 +11,7 @@ import 'package:healthpost_app/models/notification_model.dart';
 import 'package:healthpost_app/notification_screen.dart';
 import 'package:healthpost_app/providers/appointment_provider.dart';
 import 'package:healthpost_app/providers/notification_provider.dart';
+import 'package:healthpost_app/services/appointment_reminder_seervice.dart';
 import 'package:healthpost_app/services/encryption_service.dart';
 import 'package:healthpost_app/services/notification_service.dart';
 import 'package:healthpost_app/services/user_key_service.dart';
@@ -74,6 +75,8 @@ class _DoctorAppointmentsScreenState
       await ref
           .read(appointmentsProvider.notifier)
           .updateStatus(apptId, apiCall);
+              await AppointmentReminderService.rescheduleAllReminders();
+
       Get.snackbar(
         l.updated,
         snackMsg ?? l.statusUpdated,
@@ -150,7 +153,6 @@ class _DoctorAppointmentsScreenState
 Future<void> _autoCompletePastAppointments(List<DAppt> confirmedAppts) async {
     final today = DateTime.now();
     final todayStart = DateTime(today.year, today.month, today.day);
-    // An appointment day has passed if its scheduled date is before today's start.
     final pastConfirmed = confirmedAppts
         .where(
           (a) =>
@@ -169,6 +171,10 @@ Future<void> _autoCompletePastAppointments(List<DAppt> confirmedAppts) async {
       try {
         await ApiService.completeAppointment(appt.id);
         debugPrint(' Auto‑completed appointment ${appt.id} (day passed)');
+        if (mounted) {
+          await AppointmentReminderService.rescheduleAllReminders(); 
+          ref.read(appointmentsProvider.notifier).refresh();
+        }
       } catch (e) {
         debugPrint(' Auto‑complete failed for ${appt.id}: $e');
       }

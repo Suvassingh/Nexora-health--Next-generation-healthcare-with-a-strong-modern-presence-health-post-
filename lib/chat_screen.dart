@@ -8,6 +8,7 @@ import 'package:get/get.dart';
 import 'package:healthpost_app/app_constants.dart';
 import 'package:healthpost_app/l10n/app_localizations.dart';
 import 'package:healthpost_app/services/encryption_service.dart';
+import 'package:healthpost_app/services/key_manager_service.dart';
 import 'package:healthpost_app/services/media_download_service.dart';
 import 'package:healthpost_app/services/presence_service.dart';
 import 'package:healthpost_app/widgets/media_preview_dilog.dart';
@@ -156,25 +157,42 @@ Future<void> _initializeChat() async {
   }
 
   //  Key management 
+  // Future<void> _ensureUserKeyPair() async {
+  //   final profile = await _supabase
+  //       .from('user_profiles')
+  //       .select('public_key')
+  //       .eq('id', _currentUserId)
+  //       .maybeSingle();
+  //   final stored = await _secureStorage.read(key: 'private_key_$_currentUserId');
+  //   final privIsOld = stored != null && !_isValidKeyFormat(stored);
+  //   final pubIsOld = profile != null &&
+  //       profile['public_key'] != null &&
+  //       !_isValidKeyFormat(profile['public_key'] as String);
+  //   if (stored == null ||
+  //       profile == null ||
+  //       profile['public_key'] == null ||
+  //       privIsOld ||
+  //       pubIsOld) {
+  //     await _generateAndSaveKeyPair();
+  //   } else {
+  //     _currentUserPrivateKeyPem = stored;
+  //   }
+  // }
+
+
   Future<void> _ensureUserKeyPair() async {
-    final profile = await _supabase
-        .from('user_profiles')
-        .select('public_key')
-        .eq('id', _currentUserId)
-        .maybeSingle();
-    final stored = await _secureStorage.read(key: 'rsa_private_key_$_currentUserId');
-    final privIsOld = stored != null && !_isValidKeyFormat(stored);
-    final pubIsOld = profile != null &&
-        profile['public_key'] != null &&
-        !_isValidKeyFormat(profile['public_key'] as String);
-    if (stored == null ||
-        profile == null ||
-        profile['public_key'] == null ||
-        privIsOld ||
-        pubIsOld) {
-      await _generateAndSaveKeyPair();
-    } else {
-      _currentUserPrivateKeyPem = stored;
+    // KeyManagerService already ran at login; just retrieve what it stored.
+    final privKey = await KeyManagerService.getPrivateKey();
+    if (privKey == null) {
+      // Fallback: re-run full key setup (cold install, cleared storage, etc.)
+      await KeyManagerService.ensureKeyPair();
+    }
+    // Read PEM from the canonical key name
+    _currentUserPrivateKeyPem = await _secureStorage.read(
+      key: 'private_key_$_currentUserId',
+    );
+    if (_currentUserPrivateKeyPem == null) {
+      throw Exception('Encryption key unavailable. Please restart the app.');
     }
   }
 
@@ -196,51 +214,117 @@ Future<void> _initializeChat() async {
     final kp = EncryptionService.generateRSAKeyPair();
     final pub = EncryptionService.publicKeyToPem(kp.publicKey);
     final priv = EncryptionService.privateKeyToPem(kp.privateKey);
-    await _secureStorage.write(key: 'rsa_private_key_$_currentUserId', value: priv);
+    await _secureStorage.write(key: 'private_key_$_currentUserId', value: priv);
     await _supabase.from('user_profiles').update({'public_key': pub}).eq('id', _currentUserId);
     _currentUserPrivateKeyPem = priv;
   }
 
 
-
-Future<void> _fetchAndDecryptAESKey() async {
+  Future<void> _fetchAndDecryptAESKey() async {
     if (_conversationId == null || _conversationId!.isEmpty) {
       throw Exception('No conversation ID available');
-    }
-    if (_currentUserPrivateKeyPem == null) {
-      throw Exception(
-        'Your encryption key is missing. Please restart the app.',
-      );
     }
 
     final conv = await _supabase
         .from('conversations')
-        .select('aes_key_encrypted_for_doctor')
+        .select('aes_key')
         .eq('id', _conversationId!)
         .maybeSingle();
 
-    String? encKey = conv?['aes_key_encrypted_for_doctor'] as String?;
-    if (encKey == null) {
-      throw Exception(
-        'AES key not found for this conversation. Please contact support.',
-      );
+    final aesB64 = conv?['aes_key'] as String?;
+    if (aesB64 == null) {
+      throw Exception('AES key not found. Please start a new conversation.');
     }
 
-    final privKey = EncryptionService.parsePrivateKeyFromPem(
-      _currentUserPrivateKeyPem!,
-    );
-    String aesB64;
-    try {
-      aesB64 = EncryptionService.decryptWithRSA(encKey, privKey);
-      if (!_isValidBase64(aesB64)) throw Exception('Invalid AES key format');
-    } catch (e) {
-      // Decryption failed – do NOT delete or regenerate keys.
-      throw Exception(
-        'Unable to decrypt conversation. Your chat history is preserved, but you cannot send messages. Please start a new conversation.',
-      );
-    }
     _aesKey = encrypt.Key.fromBase64(aesB64);
   }
+
+// Replace _ensureConversationExists
+  Future<void> _ensureConversationExists() async {
+    if (_conversationId != null && _conversationId!.isNotEmpty) return;
+
+    final existing = await _supabase
+        .from('conversations')
+        .select('id')
+        .eq('doctor_id', _currentUserId)
+        .eq('patient_id', widget.partnerId)
+        .maybeSingle();
+
+    if (existing != null) {
+      _conversationId = existing['id'] as String;
+      return;
+    }
+
+    // Generate plain AES key — stored server-side, protected by RLS
+    final aesKey = EncryptionService.generateAESKey();
+    final aesB64 = aesKey.base64;
+
+    try {
+      final newConv = await _supabase
+          .from('conversations')
+          .insert({
+        'patient_id': widget.partnerId,
+        'doctor_id': _currentUserId,
+        'aes_key': aesB64,
+      })
+          .select('id')
+          .single();
+      _conversationId = newConv['id'] as String;
+    } catch (e) {
+      if (e.toString().contains('23505')) {
+        // Race condition — other party created it first
+        final retry = await _supabase
+            .from('conversations')
+            .select('id')
+            .eq('doctor_id', _currentUserId)
+            .eq('patient_id', widget.partnerId)
+            .maybeSingle();
+        if (retry != null) {
+          _conversationId = retry['id'] as String;
+          return;
+        }
+      }
+      rethrow;
+    }
+  }
+// Future<void> _fetchAndDecryptAESKey() async {
+//     if (_conversationId == null || _conversationId!.isEmpty) {
+//       throw Exception('No conversation ID available');
+//     }
+//     if (_currentUserPrivateKeyPem == null) {
+//       throw Exception(
+//         'Your encryption key is missing. Please restart the app.',
+//       );
+//     }
+//
+//     final conv = await _supabase
+//         .from('conversations')
+//         .select('aes_key')
+//         .eq('id', _conversationId!)
+//         .maybeSingle();
+//
+//     String? encKey = conv?['aes_key'] as String?;
+//     if (encKey == null) {
+//       throw Exception(
+//         'AES key not found for this conversation. Please contact support.',
+//       );
+//     }
+//
+//     final privKey = EncryptionService.parsePrivateKeyFromPem(
+//       _currentUserPrivateKeyPem!,
+//     );
+//     String aesB64;
+//     try {
+//       aesB64 = EncryptionService.decryptWithRSA(encKey, privKey);
+//       if (!_isValidBase64(aesB64)) throw Exception('Invalid AES key format');
+//     } catch (e) {
+//       // Decryption failed – do NOT delete or regenerate keys.
+//       throw Exception(
+//         'Unable to decrypt conversation. Your chat history is preserved, but you cannot send messages. Please start a new conversation.',
+//       );
+//     }
+//     _aesKey = encrypt.Key.fromBase64(aesB64);
+//   }
 
 
   bool _isValidBase64(String str) {
@@ -500,78 +584,78 @@ _typingChannel!.onPresenceSync((_) {
     }
   }
 
-Future<void> _ensureConversationExists() async {
-    if (_conversationId != null && _conversationId!.isNotEmpty) return;
-
-    final existing = await _supabase
-        .from('conversations')
-        .select('id')
-        .eq('doctor_id', _currentUserId)
-        .eq('patient_id', widget.partnerId)
-        .maybeSingle();
-
-    if (existing != null) {
-      _conversationId = existing['id'] as String;
-      return;
-    }
-
-    // Fetch public keys
-    final rows = await _supabase
-        .from('user_profiles')
-        .select('id, public_key')
-        .inFilter('id', [_currentUserId, widget.partnerId]);
-
-    final Map<String, String> pubKeys = {};
-    for (final r in rows) {
-      pubKeys[r['id'] as String] = r['public_key'] as String;
-    }
-
-    if (!pubKeys.containsKey(_currentUserId) ||
-        !pubKeys.containsKey(widget.partnerId)) {
-      throw Exception('Encryption keys missing. Please restart the app.');
-    }
-
-    final aesKey = EncryptionService.generateAESKey();
-    final aesB64 = aesKey.base64;
-
-    final encForPatient = EncryptionService.encryptWithRSA(
-      aesB64,
-      EncryptionService.parsePublicKeyFromPem(pubKeys[widget.partnerId]!),
-    );
-    final encForDoctor = EncryptionService.encryptWithRSA(
-      aesB64,
-      EncryptionService.parsePublicKeyFromPem(pubKeys[_currentUserId]!),
-    );
-
-    try {
-      final newConv = await _supabase
-          .from('conversations')
-          .insert({
-            'patient_id': widget.partnerId,
-            'doctor_id': _currentUserId,
-            'aes_key_encrypted_for_patient': encForPatient,
-            'aes_key_encrypted_for_doctor': encForDoctor,
-          })
-          .select('id')
-          .single();
-      _conversationId = newConv['id'] as String;
-    } catch (e) {
-      // Duplicate key error (code 23505) – conversation created by other party
-      if (e.toString().contains('23505')) {
-        final retry = await _supabase
-            .from('conversations')
-            .select('id')
-            .eq('doctor_id', _currentUserId)
-            .eq('patient_id', widget.partnerId)
-            .maybeSingle();
-        if (retry != null) {
-          _conversationId = retry['id'] as String;
-          return;
-        }
-      }
-      rethrow;
-    }
-  }
+// Future<void> _ensureConversationExists() async {
+//     if (_conversationId != null && _conversationId!.isNotEmpty) return;
+//
+//     final existing = await _supabase
+//         .from('conversations')
+//         .select('id')
+//         .eq('doctor_id', _currentUserId)
+//         .eq('patient_id', widget.partnerId)
+//         .maybeSingle();
+//
+//     if (existing != null) {
+//       _conversationId = existing['id'] as String;
+//       return;
+//     }
+//
+//     // Fetch public keys
+//     final rows = await _supabase
+//         .from('user_profiles')
+//         .select('id, public_key')
+//         .inFilter('id', [_currentUserId, widget.partnerId]);
+//
+//     final Map<String, String> pubKeys = {};
+//     for (final r in rows) {
+//       pubKeys[r['id'] as String] = r['public_key'] as String;
+//     }
+//
+//     if (!pubKeys.containsKey(_currentUserId) ||
+//         !pubKeys.containsKey(widget.partnerId)) {
+//       throw Exception('Encryption keys missing. Please restart the app.');
+//     }
+//
+//     final aesKey = EncryptionService.generateAESKey();
+//     final aesB64 = aesKey.base64;
+//
+//     final encForPatient = EncryptionService.encryptWithRSA(
+//       aesB64,
+//       EncryptionService.parsePublicKeyFromPem(pubKeys[widget.partnerId]!),
+//     );
+//     final encForDoctor = EncryptionService.encryptWithRSA(
+//       aesB64,
+//       EncryptionService.parsePublicKeyFromPem(pubKeys[_currentUserId]!),
+//     );
+//
+//     try {
+//       final newConv = await _supabase
+//           .from('conversations')
+//           .insert({
+//             'patient_id': widget.partnerId,
+//             'doctor_id': _currentUserId,
+//             'aes_key_encrypted_for_patient': encForPatient,
+//             'aes_key_encrypted_for_doctor': encForDoctor,
+//           })
+//           .select('id')
+//           .single();
+//       _conversationId = newConv['id'] as String;
+//     } catch (e) {
+//       // Duplicate key error (code 23505) – conversation created by other party
+//       if (e.toString().contains('23505')) {
+//         final retry = await _supabase
+//             .from('conversations')
+//             .select('id')
+//             .eq('doctor_id', _currentUserId)
+//             .eq('patient_id', widget.partnerId)
+//             .maybeSingle();
+//         if (retry != null) {
+//           _conversationId = retry['id'] as String;
+//           return;
+//         }
+//       }
+//       rethrow;
+//     }
+//   }
 
   Future<void> _uploadAndSendMedia(File file, String type) async {
     if (_sending) return;
@@ -866,7 +950,9 @@ Future<void> _ensureConversationExists() async {
                 child: IconButton(
                   icon:
                   const Icon(Icons.send, color: Colors.white, size: 18),
-                  onPressed: _sendMessage,
+                  onPressed: (){
+                    _sendMessage;
+                  },
                 ),
               ),
           ],
