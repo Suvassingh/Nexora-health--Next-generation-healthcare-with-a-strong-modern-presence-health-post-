@@ -484,50 +484,6 @@ final now = DateTime.now();
       ),
     ),
     actions: [
-      Consumer(
-        builder: (context, ref, _) {
-          final unread = ref.watch(notificationProvider).unreadCount;
-          return Padding(
-            padding: const EdgeInsets.only(left: 4),
-            child: GestureDetector(
-              onTap: () => Get.to(() => const NotificationScreen()),
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  const Icon(
-                    Icons.notifications_outlined,
-                    color: Colors.white,
-                    size: 26,
-                  ),
-                  if (unread > 0)
-                    Positioned(
-                      right: -4,
-                      top: -4,
-                      child: Container(
-                        width: 18,
-                        height: 18,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFEF4444),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Center(
-                          child: Text(
-                            unread > 99 ? '99+' : '$unread',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
       IconButton(
         icon: const Icon(Icons.refresh_rounded, color: Colors.white),
         onPressed: () => ref.read(appointmentsProvider.notifier).refresh(),

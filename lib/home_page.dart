@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:healthpost_app/appointment_screen.dart';
 import 'package:healthpost_app/l10n/app_localizations.dart';
+import 'package:healthpost_app/providers/notification_provider.dart';
 import 'package:healthpost_app/services/appointment_reminder_seervice.dart';
 import 'package:healthpost_app/widgets/home_appointment.dart';
 import 'package:healthpost_app/widgets/home_hero_header.dart';
@@ -19,6 +20,9 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:healthpost_app/controller/internet_status_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:healthpost_app/providers/home_provider.dart';
+
+import 'call_history_screen.dart';
+import 'notification_screen.dart';
 
 class HomeStats {
   final int todayPatients;
@@ -175,7 +179,6 @@ class _DoctorHomeScreenState extends ConsumerState<DoctorHomeScreen>
 
  body: homeAsync.when(
   data: (data) {
-    // 1️⃣ Schedule reminders only once (moved from the first data block)
     if (!_remindersScheduled) {
       _remindersScheduled = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -183,12 +186,10 @@ class _DoctorHomeScreenState extends ConsumerState<DoctorHomeScreen>
       });
     }
 
-    // 2️⃣ Start the animation if not already started (moved from the second data block)
     if (!_animController.isCompleted) {
       _animController.forward();
     }
 
-    // 3️⃣ Return the animated content wrapped with RefreshIndicator
     return FadeTransition(
       opacity: _fadeAnim,
       child: RefreshIndicator(
@@ -252,10 +253,60 @@ class _DoctorHomeScreenState extends ConsumerState<DoctorHomeScreen>
             );
           return const SizedBox.shrink();
         }),
-                const SizedBox(width: 4),
 
+        const SizedBox(width: 8),
+        IconButton(
+          icon: const Icon(Icons.call,color: Colors.white,),
+          onPressed: () => Get.to(() => const CallHistoryScreen()),
+        ),
         const LanguageToggleButton(),
-        const SizedBox(width: 4),
+        const SizedBox(width: 8),
+        Consumer(
+          builder: (context, ref, _) {
+            final unread = ref.watch(notificationProvider).unreadCount;
+            return Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: GestureDetector(
+                onTap: () => Get.to(() => const NotificationScreen()),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    const Icon(
+                      Icons.notifications_outlined,
+                      color: Colors.white,
+                      size: 26,
+                    ),
+                    if (unread > 0)
+                      Positioned(
+                        right: -4,
+                        top: -4,
+                        child: Container(
+                          width: 18,
+                          height: 18,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFEF4444),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Center(
+                            child: Text(
+                              unread > 99 ? '99+' : '$unread',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+        const SizedBox(width: 16),
+
       ],
     );
   }
