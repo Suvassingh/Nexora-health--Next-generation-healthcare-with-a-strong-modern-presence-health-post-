@@ -22,7 +22,53 @@ import 'package:healthpost_app/models/doctor_appointment.dart';
 import 'package:healthpost_app/services/api_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+// ========== HELPER FUNCTIONS (same as patient app) ==========
 
+IconData consultTypeIcon(String type) {
+  switch (type.toLowerCase()) {
+    case 'video':
+      return Icons.videocam_rounded;
+    case 'audio':
+    case 'phone':
+      return Icons.call_rounded;
+    case 'chat':
+    case 'message':
+      return Icons.chat_bubble_rounded;
+    default:
+      return Icons.local_hospital_rounded;
+  }
+}
+
+String consultTypeLabel(String type, BuildContext context) {
+  final l = AppLocalizations.of(context)!;
+  switch (type.toLowerCase()) {
+    case 'video':
+      return l.video;
+    case 'audio':
+    case 'phone':
+      return l.audio;
+    case 'chat':
+    case 'message':
+      return l.chat;
+    default:
+      return l.physical;
+  }
+}
+
+Color consultTypeColor(String type) {
+  switch (type.toLowerCase()) {
+    case 'video':
+      return const Color(0xFF6C5CE7);
+    case 'audio':
+    case 'phone':
+      return const Color(0xFF00B894);
+    case 'chat':
+    case 'message':
+      return const Color(0xFF0984E3);
+    default:
+      return const Color(0xFFE17055);
+  }
+}
 class DoctorAppointmentsScreen extends ConsumerStatefulWidget {
   const DoctorAppointmentsScreen({super.key});
 
@@ -241,11 +287,13 @@ Future<void> _autoCompletePastAppointments(List<DAppt> confirmedAppts) async {
     ),
   );
 
-  void _showDetail(DAppt a) => showModalBottomSheet(
+
+
+  void _showDetailSheet(DAppt a) => showModalBottomSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => DetailSheet(
+    builder: (_) => DoctorDetailSheet(
       appt: a,
       onConfirm: a.isPending
           ? () {
@@ -269,6 +317,12 @@ Future<void> _autoCompletePastAppointments(List<DAppt> confirmedAppts) async {
           ? () {
               Navigator.pop(context);
               _noShowAppt(a);
+            }
+          : null,
+      onConsultTap: a.isToday && !a.isPending
+          ? () {
+              Navigator.pop(context);
+              _startConsultation(a);
             }
           : null,
     ),
@@ -499,25 +553,49 @@ final now = DateTime.now();
       tabAlignment: TabAlignment.start,
       labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
       unselectedLabelStyle: const TextStyle(fontSize: 12),
+      
       tabs: [
-        Tab(
-          text: data != null && data.pending.isNotEmpty
-              ? '${AppLocalizations.of(context)!.pending} (${data.pending.length})'
-              : AppLocalizations.of(context)!.pending,
-        ),
-        Tab(
-          text: data != null && data.today.isNotEmpty
-              ? '${AppLocalizations.of(context)!.today} (${data.today.length})'
-              : AppLocalizations.of(context)!.today,
-        ),
-        Tab(
-          text: data != null && data.upcoming.isNotEmpty
-              ? '${AppLocalizations.of(context)!.upcoming} (${data.upcoming.length})'
-              : AppLocalizations.of(context)!.upcoming,
-        ),
-        Tab(text: AppLocalizations.of(context)!.completed),
-        Tab(text: AppLocalizations.of(context)!.cancelled),
-      ],
+  Tab(
+    child: _BadgeTab(
+      label: AppLocalizations.of(context)!.pending,
+      count: data?.pending.length ?? 0,
+      badgeColor: const Color(0xFFF57F17),
+      showDot: (data?.pending.length ?? 0) > 0,
+    ),
+  ),
+  Tab(
+    child: _BadgeTab(
+      label: AppLocalizations.of(context)!.today,
+      count: data?.today.length ?? 0,
+      badgeColor: AppConstants.primaryColor,
+      showDot: (data?.today.length ?? 0) > 0,
+    ),
+  ),
+  Tab(
+    child: _BadgeTab(
+      label: AppLocalizations.of(context)!.upcoming,
+      count: data?.upcoming.length ?? 0,
+      badgeColor: const Color(0xFF4CAF50),
+      showDot: (data?.upcoming.length ?? 0) > 0,
+    ),
+  ),
+  Tab(
+    child: _BadgeTab(
+      label: AppLocalizations.of(context)!.completed,
+      count: data?.completed.length ?? 0,
+      badgeColor: const Color(0xFF2196F3),
+      showDot: (data?.completed.length ?? 0) > 0,
+    ),
+  ),
+  Tab(
+    child: _BadgeTab(
+      label: AppLocalizations.of(context)!.cancelled,
+      count: data?.cancelled.length ?? 0,
+      badgeColor: const Color(0xFFF44336),
+      showDot: (data?.cancelled.length ?? 0) > 0,
+    ),
+  ),
+],
     ),
   );
 
@@ -531,10 +609,10 @@ final now = DateTime.now();
         itemCount: list.length,
         itemBuilder: (_, i) {
           final a = list[i];
-          return ApptCard(
+          return DoctorApptCard(
             appt: a,
             processing: _processing,
-            onTap: () => _showDetail(a),
+            onTap: () => _showDetailSheet(a),
             onConsultTap: type == 'today' ? () => _startConsultation(a) : null,
             onConfirm: type == 'pending' ? () => _confirmAppt(a) : null,
             onDecline: type == 'pending' ? () => _declineAppt(a) : null,
@@ -656,4 +734,837 @@ final now = DateTime.now();
       ),
     ),
   );
+}
+class DoctorApptCard extends StatelessWidget {
+  final DAppt appt;
+  final bool processing;
+  final VoidCallback? onTap;
+  final VoidCallback? onConsultTap;
+  final VoidCallback? onConfirm;
+  final VoidCallback? onDecline;
+  final VoidCallback? onComplete;
+  final VoidCallback? onNoShow;
+
+  const DoctorApptCard({
+    super.key,
+    required this.appt,
+    required this.processing,
+    this.onTap,
+    this.onConsultTap,
+    this.onConfirm,
+    this.onDecline,
+    this.onComplete,
+    this.onNoShow,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final typeColor = appt.consultIconColor;
+    final typeIcon = appt.consultIcon;
+
+    Widget card = Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: appt.isPending
+            ? const Border(left: BorderSide(color: Color(0xFFF57F17), width: 4))
+            : appt.isToday && !appt.isPending
+            ? Border(
+                left: BorderSide(color: AppConstants.primaryColor, width: 4),
+              )
+            : null,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          if (appt.isPending)
+            _buildBanner(
+              icon: Icons.hourglass_empty_rounded,
+              color: const Color(0xFFF57F17),
+              bgColor: const Color(0xFFFFF8E1),
+              text: AppLocalizations.of(context)!.awaitingYourConfirmation,
+            ),
+          if (appt.isToday && !appt.isPending)
+            _buildBanner(
+              icon: Icons.today_rounded,
+              color: AppConstants.primaryColor,
+              bgColor: AppConstants.primaryColor.withOpacity(0.08),
+              text: AppLocalizations.of(context)!.todaysAppointment,
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Stack(
+                  children: [
+                    _Avatar(
+                      name: appt.patientName,
+                      url: appt.patientAvatarUrl,
+                      size: 50,
+                    ),
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: typeColor,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 1.5),
+                        ),
+                        child: Icon(typeIcon, size: 11, color: Colors.white),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        appt.patientName,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1A1A1A),
+                        ),
+                      ),
+                      const SizedBox(height: 7),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.calendar_today_rounded,
+                                size: 13,
+                                color: Color(0xFFB71C1C),
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                appt.dateTimeLabel,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Color(0xFFB71C1C),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: typeColor.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(typeIcon, size: 12, color: typeColor),
+                                const SizedBox(width: 4),
+                                Text(
+                                  appt.consultLabel,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: typeColor,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (appt.patientNotes != null &&
+                          appt.patientNotes!.isNotEmpty) ...[
+                        const SizedBox(height: 5),
+                        Text(
+                          appt.patientNotes!,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey,
+                            fontStyle: FontStyle.italic,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 11,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: appt.statusColor,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    appt.statusLabel,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_hasButtons()) ...[
+            const Divider(height: 1, thickness: 0.5, indent: 14, endIndent: 14),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+              child: _buildActionButtons(context),
+            ),
+          ],
+        ],
+      ),
+    );
+    if (onTap != null) card = GestureDetector(onTap: onTap, child: card);
+    return card;
+  }
+
+  bool _hasButtons() =>
+      (appt.isPending && (onConfirm != null || onDecline != null)) ||
+      (appt.isToday &&
+          (onConsultTap != null || onComplete != null || onNoShow != null)) ||
+      ((appt.isConfirmed && !appt.isToday) &&
+          (onComplete != null || onNoShow != null));
+
+  Widget _buildActionButtons(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    if (appt.isPending) {
+      return Row(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: processing ? null : onDecline,
+              icon: const Icon(Icons.close, size: 17),
+              label: Text(l.decline),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.red.shade600,
+                side: BorderSide(color: Colors.red.shade300),
+                backgroundColor: Colors.red.shade50,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: processing ? null : onConfirm,
+              icon: const Icon(Icons.check, size: 17),
+              label: Text(l.confirm),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1565C0),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+    final isToday = appt.isToday && !appt.isPending;
+    return Column(
+      children: [
+        if (isToday && onConsultTap != null)
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: processing ? null : onConsultTap,
+              icon: Icon(appt.consultIcon, size: 17),
+              label: Text(_joinLabel(appt.consultType, context)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: appt.consultIconColor,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
+              ),
+            ),
+          ),
+        if (isToday &&
+            onConsultTap != null &&
+            (onComplete != null || onNoShow != null))
+          const SizedBox(height: 8),
+        Row(
+          children: [
+            if (onComplete != null)
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: processing ? null : onComplete,
+                  icon: const Icon(Icons.check_circle_outline, size: 17),
+                  label: Text(l.complete),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF2E7D32),
+                    side: const BorderSide(color: Color(0xFFA5D6A7)),
+                    backgroundColor: const Color(0xFFE8F5E9),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            if (onComplete != null && onNoShow != null)
+              const SizedBox(width: 10),
+            if (onNoShow != null)
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: processing ? null : onNoShow,
+                  icon: const Icon(Icons.person_off_outlined, size: 17),
+                  label: Text(l.noShow),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.brown.shade600,
+                    side: BorderSide(color: Colors.brown.shade200),
+                    backgroundColor: Colors.brown.shade50,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBanner({
+    required IconData icon,
+    required Color color,
+    required Color bgColor,
+    required String text,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Text(
+            text,
+            style: TextStyle(
+              fontSize: 12,
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _joinLabel(String type, BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    switch (type.toLowerCase()) {
+      case 'video':
+        return l.joinVideoCall;
+      case 'audio':
+        return l.joinAudioCall;
+      case 'chat':
+        return l.startChat;
+      default:
+        return l.viewDetails;
+    }
+  }
+}
+
+
+class DoctorDetailSheet extends StatelessWidget {
+  final DAppt appt;
+  final VoidCallback? onConfirm, onDecline, onComplete, onNoShow, onConsultTap;
+  const DoctorDetailSheet({
+    super.key,
+    required this.appt,
+    this.onConfirm,
+    this.onDecline,
+    this.onComplete,
+    this.onNoShow,
+    this.onConsultTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    final typeColor = appt.consultIconColor;
+    final typeIcon = appt.consultIcon;
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      minChildSize: 0.4,
+      maxChildSize: 0.92,
+      builder: (_, ctrl) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 12, bottom: 8),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Container(
+              margin: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: typeColor.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: typeColor.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(typeIcon, size: 18, color: typeColor),
+                  const SizedBox(width: 10),
+                  Text(
+                    appt.consultLabel,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: typeColor,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    _consultDescription(appt.consultType, context),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: typeColor.withOpacity(0.8),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (appt.isPending)
+              _buildStatusBanner(
+                icon: Icons.hourglass_empty_rounded,
+                color: const Color(0xFFF57F17),
+                bgColor: const Color(0xFFFFF8E1),
+                text: l.appointmentPendingConfirmation,
+              ),
+            if (appt.isToday && !appt.isPending)
+              _buildStatusBanner(
+                icon: Icons.today_rounded,
+                color: AppConstants.primaryColor,
+                bgColor: AppConstants.primaryColor.withOpacity(0.08),
+                text: l.todaysAppointment,
+              ),
+            Expanded(
+              child: ListView(
+                controller: ctrl,
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 30),
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Stack(
+                        children: [
+                          _Avatar(
+                            name: appt.patientName,
+                            url: appt.patientAvatarUrl,
+                            size: 56,
+                          ),
+                          Positioned(
+                            right: 0,
+                            bottom: 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(5),
+                              decoration: BoxDecoration(
+                                color: typeColor,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Icon(
+                                typeIcon,
+                                size: 12,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              appt.patientName,
+                              style: const TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF1A1A1A),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: appt.statusColor,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          appt.statusLabel,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  _SheetRow(
+                    icon: Icons.calendar_today_rounded,
+                    label: l.date,
+                    value: appt.dateLabel,
+                  ),
+                  _SheetRow(
+                    icon: Icons.access_time_rounded,
+                    label: l.time,
+                    value: appt.timeLabel,
+                  ),
+                  _SheetRow(
+                    icon: typeIcon,
+                    label: l.consultationType,
+                    value: appt.consultLabel,
+                  ),
+                  if (appt.patientNotes != null &&
+                      appt.patientNotes!.isNotEmpty)
+                    _SheetRow(
+                      icon: Icons.notes_rounded,
+                      label: l.reason,
+                      value: appt.patientNotes!,
+                    ),
+                  const SizedBox(height: 24),
+                  if (appt.isPending &&
+                      (onConfirm != null || onDecline != null))
+                    Row(
+                      children: [
+                        if (onDecline != null)
+                          Expanded(child: _buildDeclineButton(context)),
+                        if (onConfirm != null && onDecline != null)
+                          const SizedBox(width: 10),
+                        if (onConfirm != null)
+                          Expanded(child: _buildConfirmButton(context)),
+                      ],
+                    ),
+                  if (appt.isToday && !appt.isPending && onConsultTap != null)
+                    _buildConsultButton(context),
+                  if ((appt.isToday || (appt.isConfirmed && !appt.isToday)) &&
+                      (onComplete != null || onNoShow != null))
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Row(
+                        children: [
+                          if (onComplete != null)
+                            Expanded(child: _buildCompleteButton(context)),
+                          if (onComplete != null && onNoShow != null)
+                            const SizedBox(width: 10),
+                          if (onNoShow != null)
+                            Expanded(child: _buildNoShowButton(context)),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusBanner({
+    required IconData icon,
+    required Color color,
+    required Color bgColor,
+    required String text,
+  }) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 12,
+                color: color,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildConfirmButton(BuildContext context) => ElevatedButton.icon(
+    onPressed: onConfirm,
+    icon: const Icon(Icons.check, size: 18),
+    label: Text(AppLocalizations.of(context)!.confirm),
+    style: ElevatedButton.styleFrom(
+      backgroundColor: const Color(0xFF1565C0),
+      foregroundColor: Colors.white,
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      elevation: 0,
+    ),
+  );
+
+  Widget _buildDeclineButton(BuildContext context) => OutlinedButton.icon(
+    onPressed: onDecline,
+    icon: const Icon(Icons.close, size: 18),
+    label: Text(AppLocalizations.of(context)!.decline),
+    style: OutlinedButton.styleFrom(
+      foregroundColor: Colors.red.shade600,
+      backgroundColor: Colors.red.shade50,
+      side: BorderSide(color: Colors.red.shade300),
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    ),
+  );
+
+  Widget _buildConsultButton(BuildContext context) => SizedBox(
+    width: double.infinity,
+    child: ElevatedButton.icon(
+      onPressed: onConsultTap,
+      icon: Icon(appt.consultIcon, size: 18),
+      label: Text(_joinLabel(appt.consultType, context)),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: appt.consultIconColor,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        elevation: 0,
+      ),
+    ),
+  );
+
+  Widget _buildCompleteButton(BuildContext context) => OutlinedButton.icon(
+    onPressed: onComplete,
+    icon: const Icon(Icons.check_circle_outline, size: 18),
+    label: Text(AppLocalizations.of(context)!.complete),
+    style: OutlinedButton.styleFrom(
+      foregroundColor: const Color(0xFF2E7D32),
+      side: const BorderSide(color: Color(0xFFA5D6A7)),
+      backgroundColor: const Color(0xFFE8F5E9),
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    ),
+  );
+
+  Widget _buildNoShowButton(BuildContext context) => OutlinedButton.icon(
+    onPressed: onNoShow,
+    icon: const Icon(Icons.person_off_outlined, size: 18),
+    label: Text(AppLocalizations.of(context)!.noShow),
+    style: OutlinedButton.styleFrom(
+      foregroundColor: Colors.brown.shade600,
+      side: BorderSide(color: Colors.brown.shade200),
+      backgroundColor: Colors.brown.shade50,
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    ),
+  );
+
+  String _consultDescription(String type, BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    switch (type.toLowerCase()) {
+      case 'video':
+        return l.videoConsultation;
+      case 'audio':
+        return l.phoneConsultation;
+      case 'chat':
+        return l.messageConsultation;
+      default:
+        return l.physicalVisit;
+    }
+  }
+
+  String _joinLabel(String type, BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    switch (type.toLowerCase()) {
+      case 'video':
+        return l.joinVideoCall;
+      case 'audio':
+        return l.joinAudioCall;
+      case 'chat':
+        return l.startChat;
+      default:
+        return l.viewDetails;
+    }
+  }
+}
+class _BadgeTab extends StatelessWidget {
+  final String label;
+  final int count;
+  final Color badgeColor;
+  final bool showDot;
+  const _BadgeTab({
+    required this.label,
+    required this.count,
+    required this.badgeColor,
+    required this.showDot,
+  });
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Text(label),
+      if (showDot) ...[
+        const SizedBox(width: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: badgeColor,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            '$count',
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ],
+    ],
+  );
+}
+
+class _SheetRow extends StatelessWidget {
+  final IconData icon;
+  final String label, value;
+  const _SheetRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 8),
+    child: Row(
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: AppConstants.primaryColor.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, size: 17, color: AppConstants.primaryColor),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 13,
+            color: Colors.grey,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const Spacer(),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF1A1A1A),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _Avatar extends StatelessWidget {
+  final String name;
+  final String? url;
+  final double size;
+  const _Avatar({required this.name, this.url, required this.size});
+
+  String get _initials {
+    final pts = name.trim().split(' ');
+    if (pts.length >= 2) return '${pts[0][0]}${pts[1][0]}'.toUpperCase();
+    return pts.isNotEmpty && pts[0].isNotEmpty ? pts[0][0].toUpperCase() : 'P';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final r = size / 2;
+    if (url != null && url!.isNotEmpty)
+      return CircleAvatar(radius: r, backgroundImage: NetworkImage(url!));
+    return CircleAvatar(
+      radius: r,
+      backgroundColor: AppConstants.primaryColor.withOpacity(0.12),
+      child: Text(
+        _initials,
+        style: TextStyle(
+          color: AppConstants.primaryColor,
+          fontWeight: FontWeight.bold,
+          fontSize: r * 0.65,
+        ),
+      ),
+    );
+  }
 }

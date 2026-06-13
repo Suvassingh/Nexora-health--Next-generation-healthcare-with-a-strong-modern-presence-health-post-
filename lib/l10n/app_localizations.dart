@@ -122,7 +122,7 @@ abstract class AppLocalizations {
   /// No description provided for @donthaveanaccout.
   ///
   /// In en, this message translates to:
-  /// **'Don\'t have an account ?'**
+  /// **'Don\'t have an account?'**
   String get donthaveanaccout;
 
   /// No description provided for @signup.
@@ -188,7 +188,7 @@ abstract class AppLocalizations {
   /// No description provided for @alreadyhaveanaccount.
   ///
   /// In en, this message translates to:
-  /// **'Already Have An Account ?'**
+  /// **'Already have an account?'**
   String get alreadyhaveanaccount;
 
   /// No description provided for @male.
@@ -716,7 +716,7 @@ abstract class AppLocalizations {
   /// No description provided for @voiceSummary.
   ///
   /// In en, this message translates to:
-  /// **'Today you have {today} patients. {pending} are pending and {completed} are completed.'**
+  /// **'Today you have {today} patients. {pending} pending and {completed} completed.'**
   String voiceSummary(int today, int pending, int completed);
 
   /// No description provided for @nextPatient.
@@ -1748,31 +1748,31 @@ abstract class AppLocalizations {
   /// No description provided for @send.
   ///
   /// In en, this message translates to:
-  /// **'send'**
+  /// **'Send'**
   String get send;
 
   /// No description provided for @ageMinimum18.
   ///
   /// In en, this message translates to:
-  /// **'ageMinimum18'**
+  /// **'You must be at least 18 years old'**
   String get ageMinimum18;
 
   /// No description provided for @verifyEmailTitle.
   ///
   /// In en, this message translates to:
-  /// **'verifyEmailTitle'**
+  /// **'Verify Your Email'**
   String get verifyEmailTitle;
 
   /// No description provided for @verifyEmailMessage.
   ///
   /// In en, this message translates to:
-  /// **'verifyEmailMessage'**
+  /// **'We\'ve sent a verification link to your email. Please verify before logging in.'**
   String get verifyEmailMessage;
 
   /// No description provided for @orSignInWith.
   ///
   /// In en, this message translates to:
-  /// **'Or SignIn With'**
+  /// **'Or sign in with'**
   String get orSignInWith;
 
   /// No description provided for @google.
@@ -1780,6 +1780,108 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Google'**
   String get google;
+
+  /// No description provided for @video.
+  ///
+  /// In en, this message translates to:
+  /// **'Video'**
+  String get video;
+
+  /// No description provided for @audio.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio'**
+  String get audio;
+
+  /// No description provided for @physical.
+  ///
+  /// In en, this message translates to:
+  /// **'Physical'**
+  String get physical;
+
+  /// No description provided for @awaitingYourConfirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'Awaiting your confirmation'**
+  String get awaitingYourConfirmation;
+
+  /// No description provided for @todaysAppointment.
+  ///
+  /// In en, this message translates to:
+  /// **'Today\'s Appointment'**
+  String get todaysAppointment;
+
+  /// No description provided for @confirmed.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirmed'**
+  String get confirmed;
+
+  /// No description provided for @joinVideoCall.
+  ///
+  /// In en, this message translates to:
+  /// **'Join Video Call'**
+  String get joinVideoCall;
+
+  /// No description provided for @joinAudioCall.
+  ///
+  /// In en, this message translates to:
+  /// **'Join Audio Call'**
+  String get joinAudioCall;
+
+  /// No description provided for @startChat.
+  ///
+  /// In en, this message translates to:
+  /// **'Start Chat'**
+  String get startChat;
+
+  /// No description provided for @viewDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'View Details'**
+  String get viewDetails;
+
+  /// No description provided for @appointmentPendingConfirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'Appointment pending confirmation'**
+  String get appointmentPendingConfirmation;
+
+  /// No description provided for @consultationType.
+  ///
+  /// In en, this message translates to:
+  /// **'Consultation Type'**
+  String get consultationType;
+
+  /// No description provided for @healthInstitution.
+  ///
+  /// In en, this message translates to:
+  /// **'Health Institution'**
+  String get healthInstitution;
+
+  /// No description provided for @videoConsultation.
+  ///
+  /// In en, this message translates to:
+  /// **'Video Consultation'**
+  String get videoConsultation;
+
+  /// No description provided for @phoneConsultation.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone Consultation'**
+  String get phoneConsultation;
+
+  /// No description provided for @messageConsultation.
+  ///
+  /// In en, this message translates to:
+  /// **'Message Consultation'**
+  String get messageConsultation;
+
+  /// No description provided for @physicalVisit.
+  ///
+  /// In en, this message translates to:
+  /// **'Physical Visit'**
+  String get physicalVisit;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -12,7 +12,7 @@ class AppLocalizationsNe extends AppLocalizations {
   String get appTitle => 'टेलिमेडिकल एप';
 
   @override
-  String get login => 'लगइन ';
+  String get login => 'लगइन';
 
   @override
   String get email => 'ईमेल';
@@ -39,22 +39,22 @@ class AppLocalizationsNe extends AppLocalizations {
   String get homeScreen => 'होम स्क्रिन';
 
   @override
-  String get name => 'पूरा नाम ';
+  String get name => 'पूरा नाम';
 
   @override
   String get phone => 'फोन';
 
   @override
-  String get age => 'उमेर ';
+  String get age => 'उमेर';
 
   @override
-  String get gender => 'लिङ्ग ';
+  String get gender => 'लिङ्ग';
 
   @override
-  String get address => 'ठेगाना ';
+  String get address => 'ठेगाना';
 
   @override
-  String get alreadyhaveanaccount => 'पहिले नै खाता छ ?';
+  String get alreadyhaveanaccount => 'पहिले नै खाता छ?';
 
   @override
   String get male => 'पुरुष';
@@ -848,20 +848,71 @@ class AppLocalizationsNe extends AppLocalizations {
   String get sendResetLink => 'रिसेट लिङ्क पठाउनुहोस्';
 
   @override
-  String get send => 'send';
+  String get send => 'पठाउनुहोस्';
 
   @override
-  String get ageMinimum18 => 'ageMinimum18';
+  String get ageMinimum18 => 'तपाईंको उमेर कम्तीमा १८ वर्ष हुनुपर्छ';
 
   @override
-  String get verifyEmailTitle => 'verifyEmailTitle';
+  String get verifyEmailTitle => 'तपाईंको इमेल प्रमाणित गर्नुहोस्';
 
   @override
-  String get verifyEmailMessage => 'verifyEmailMessage';
+  String get verifyEmailMessage => 'हामीले तपाईंको इमेलमा प्रमाणीकरण लिङ्क पठाएका छौं। लगइन गर्नुअघि कृपया प्रमाणित गर्नुहोस्।';
 
   @override
-  String get orSignInWith => 'Or SignIn With';
+  String get orSignInWith => 'वा यसरी साइन इन गर्नुहोस्';
 
   @override
-  String get google => 'Google';
+  String get google => 'गुगल';
+
+  @override
+  String get video => 'भिडियो';
+
+  @override
+  String get audio => 'अडियो';
+
+  @override
+  String get physical => 'प्रत्यक्ष';
+
+  @override
+  String get awaitingYourConfirmation => 'तपाईंको पुष्टिको पर्खाइमा';
+
+  @override
+  String get todaysAppointment => 'आजको अपोइन्टमेन्ट';
+
+  @override
+  String get confirmed => 'पुष्टि भयो';
+
+  @override
+  String get joinVideoCall => 'भिडियो कल जोड्नुहोस्';
+
+  @override
+  String get joinAudioCall => 'अडियो कल जोड्नुहोस्';
+
+  @override
+  String get startChat => 'च्याट सुरु गर्नुहोस्';
+
+  @override
+  String get viewDetails => 'विवरण हेर्नुहोस्';
+
+  @override
+  String get appointmentPendingConfirmation => 'अपोइन्टमेन्ट पुष्टिको पर्खाइमा छ';
+
+  @override
+  String get consultationType => 'परामर्श प्रकार';
+
+  @override
+  String get healthInstitution => 'स्वास्थ्य संस्था';
+
+  @override
+  String get videoConsultation => 'Video Consultation';
+
+  @override
+  String get phoneConsultation => 'फोन परामर्श';
+
+  @override
+  String get messageConsultation => 'सन्देश परामर्श';
+
+  @override
+  String get physicalVisit => 'प्रत्यक्ष भेट';
 }

@@ -21,7 +21,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get password => 'Password';
 
   @override
-  String get donthaveanaccout => 'Don\'t have an account ?';
+  String get donthaveanaccout => 'Don\'t have an account?';
 
   @override
   String get signup => 'Sign Up';
@@ -54,7 +54,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get address => 'Address';
 
   @override
-  String get alreadyhaveanaccount => 'Already Have An Account ?';
+  String get alreadyhaveanaccount => 'Already have an account?';
 
   @override
   String get male => 'Male';
@@ -325,7 +325,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String voiceSummary(int today, int pending, int completed) {
-    return 'Today you have $today patients. $pending are pending and $completed are completed.';
+    return 'Today you have $today patients. $pending pending and $completed completed.';
   }
 
   @override
@@ -848,20 +848,71 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sendResetLink => 'Send Reset Link';
 
   @override
-  String get send => 'send';
+  String get send => 'Send';
 
   @override
-  String get ageMinimum18 => 'ageMinimum18';
+  String get ageMinimum18 => 'You must be at least 18 years old';
 
   @override
-  String get verifyEmailTitle => 'verifyEmailTitle';
+  String get verifyEmailTitle => 'Verify Your Email';
 
   @override
-  String get verifyEmailMessage => 'verifyEmailMessage';
+  String get verifyEmailMessage => 'We\'ve sent a verification link to your email. Please verify before logging in.';
 
   @override
-  String get orSignInWith => 'Or SignIn With';
+  String get orSignInWith => 'Or sign in with';
 
   @override
   String get google => 'Google';
+
+  @override
+  String get video => 'Video';
+
+  @override
+  String get audio => 'Audio';
+
+  @override
+  String get physical => 'Physical';
+
+  @override
+  String get awaitingYourConfirmation => 'Awaiting your confirmation';
+
+  @override
+  String get todaysAppointment => 'Today\'s Appointment';
+
+  @override
+  String get confirmed => 'Confirmed';
+
+  @override
+  String get joinVideoCall => 'Join Video Call';
+
+  @override
+  String get joinAudioCall => 'Join Audio Call';
+
+  @override
+  String get startChat => 'Start Chat';
+
+  @override
+  String get viewDetails => 'View Details';
+
+  @override
+  String get appointmentPendingConfirmation => 'Appointment pending confirmation';
+
+  @override
+  String get consultationType => 'Consultation Type';
+
+  @override
+  String get healthInstitution => 'Health Institution';
+
+  @override
+  String get videoConsultation => 'Video Consultation';
+
+  @override
+  String get phoneConsultation => 'Phone Consultation';
+
+  @override
+  String get messageConsultation => 'Message Consultation';
+
+  @override
+  String get physicalVisit => 'Physical Visit';
 }
